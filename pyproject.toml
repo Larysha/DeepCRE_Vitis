@@ -1,0 +1,65 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/"] 
+
+[project]
+name = "deepCRE-Vitis"
+version = "0.0.1+vitis" 
+description = "A Vitis vinifera adapted re-implementation of deepCRE for gene activity prediction and analysis."
+readme = "readme.md"
+requires-python = ">=3.8, <3.12" 
+keywords = ["deep learning", "genomics", "Vitis vinifera", "drought adaptation", "CRE", "gene regulation"]
+
+authors = [
+  { name="Gernot Schmitz", email="g.schmitz@fz-juelich.de" },
+  { name="Fritz Peleke", email="peleke@ipk-gatersleben.de"}
+]
+
+
+adapted_by = [
+  { name="Larysha Rothmann", email="larysha@sun.ac.za" }
+]
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Development Status :: 3 - Alpha", 
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence"
+]
+
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+
+dependencies = [
+    "tensorflow==2.15.0", 
+    "pandas>=2.0.0,<3.0.0",
+    "numpy>=1.24.4,<2.0.0",
+    "scipy>=1.10.1,<2.0.0",
+    "scikit-learn>=1.3.2,<2.0.0",
+    "seaborn>=0.13.0,<0.14.0",
+    "pyranges>=0.1.4,<0.2.0",
+    "pyfaidx>=0.8.1,<0.9.0", # may need to explicily state conda-forge channel if using conda
+    "biopython>=1.83,<1.84",
+    "tqdm>=4.67.0,<5.0.0",
+    "pyyaml>=6.0.0,<7.0.0",
+    "deeplift==0.6.13.0", # Potentially problematic older dependency for interpretation
+    "modisco==0.5.16.4.1", # Potentially problematic older dependency for interpretation
+    "shap>=0.40.0,<0.45.0" 
+    # "h5py>=3.0.0,<4.0.0" if not pulled by TF
+]
+
+# Updated URLs to reflect this is an adaptation
+[project.urls]
+Homepage = "https://github.com/NAMlab/deepCRE_reimplemented" 
+Repository = "https://github.com/Larysha/DeepCRE_Vitis" 
+Issues = "https://github.com/NAMlab/deepCRE_reimplemented/issues"
+Adapted_From = "https://github.com/NAMlab/deepCRE_reimplemented" 
+
+
+

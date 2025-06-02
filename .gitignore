@@ -1,0 +1,23 @@
+# Ignore all preprocessing data/scripts
+preprocessing/
+
+# Ignore intermediate and model output files
+vitis_cre/src/genome/
+vitis_cre/src/gene_models/
+vitis_cre/src/blast_db/
+vitis_cre/src/protein_seq/
+vitis_cre/src/blast_results/
+vitis_cre/src/results/
+vitis_cre/src/saved_models/
+vitis_cre/src/tpm_counts/
+
+# Ignore common junk
+__pycache__/
+*.pyc
+*.pyo
+*.log
+*.out
+*.err
+
+# Ignore pickle files
+*.pickle
