@@ -178,6 +178,14 @@ def main() -> None:
         else:
             print("No BLAST matches remained after filtering based on valid protein IDs")
 
+        # Count how many validation genes per chromosome
+        val_chr_counts = info[info['gene_id'].isin(val_set)]['chrom'].value_counts().sort_index()
+
+        print("\nValidation gene counts per chromosome:")
+        for chrom, count in val_chr_counts.items():
+            print(f"{chrom}: {count}")
+
+
 
     else:
         print(f"BLAST output file not found at {blast_output_path}")
@@ -186,6 +194,7 @@ def main() -> None:
     with open(pickle_file_path, 'wb') as pickle_file:
         pickle.dump(validation_genes, pickle_file, protocol=pickle.HIGHEST_PROTOCOL)
 
+    print(f"Unique chromosomes in val set: {info[info['gene_id'].isin(val_set)]['chrom'].unique()}")
     print(f"Validation genes saved to {pickle_file_path}")
 
 if __name__ == "__main__":

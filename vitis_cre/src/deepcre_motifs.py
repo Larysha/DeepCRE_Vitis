@@ -7,9 +7,10 @@ import os
 import modisco
 from importlib import reload
 import h5py
-from utils import get_filename_from_path, get_time_stamp, make_absolute_path, result_summary
-from deepcre_interpret import extract_scores, find_newest_interpretation_results, get_val_obj_names
-from parsing import ModelCase, ParsedInputs, RunInfo
+
+from vitis_cre.src.utils import get_filename_from_path, get_time_stamp, make_absolute_path, result_summary
+from vitis_cre.src.deepcre_interpret import extract_scores, find_newest_interpretation_results, get_val_obj_names
+from vitis_cre.src.parsing import ModelCase, ParsedInputs, RunInfo
 
 
 def modisco_run(contribution_scores: np.ndarray, hypothetical_scores: np.ndarray, one_hots: np.ndarray, output_name: str):
@@ -44,7 +45,7 @@ def modisco_run(contribution_scores: np.ndarray, hypothetical_scores: np.ndarray
             initial_flank_to_add=2,
             final_flank_to_add=0,
             final_min_cluster_size=30,
-            n_cores=5
+            n_cores=4
         )
     )(
         task_names=['task0'],

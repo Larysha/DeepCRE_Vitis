@@ -48,10 +48,7 @@ dependencies = [
     "biopython>=1.83,<1.84",
     "tqdm>=4.67.0,<5.0.0",
     "pyyaml>=6.0.0,<7.0.0",
-    "deeplift==0.6.13.0", # Potentially problematic older dependency for interpretation
-    "modisco==0.5.16.4.1", # Potentially problematic older dependency for interpretation
-    "shap>=0.40.0,<0.45.0" 
-    # "h5py>=3.0.0,<4.0.0" if not pulled by TF
+    "h5py>=3.0.0,<4.0.0" 
 ]
 
 # Updated URLs to reflect this is an adaptation

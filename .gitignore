@@ -1,5 +1,9 @@
 # Ignore all preprocessing data/scripts
 preprocessing/
+sandbox_models/
+chpc_bin/
+figures/
+test_folder/
 
 # Ignore intermediate and model output files
 vitis_cre/src/genome/
