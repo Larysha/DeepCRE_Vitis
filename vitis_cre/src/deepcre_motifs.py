@@ -45,7 +45,7 @@ def modisco_run(contribution_scores: np.ndarray, hypothetical_scores: np.ndarray
             initial_flank_to_add=2,
             final_flank_to_add=0,
             final_min_cluster_size=30,
-            n_cores=4
+            n_cores=2
         )
     )(
         task_names=['task0'],
