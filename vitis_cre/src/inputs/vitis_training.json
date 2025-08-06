@@ -1,9 +1,9 @@
 [
   {
     "model_case": "ssr",
-    "genome": "/home/rish/phd_2025/DeepCRE_Vitis/vitis_cre/src/genome/vitis_vinifera_PN40024_dna.fa",
-    "annotation": "/home/rish/phd_2025/DeepCRE_Vitis/vitis_cre/src/gene_models/vitis_vinifera_PN40024.gff3",
-    "targets": "/home/rish/phd_2025/DeepCRE_Vitis/vitis_cre/src/tpm_counts/vitis_drought_leaf_targets.csv",
+    "genome": "vitis_vinifera_PN40024_dna.fa",
+    "annotation": "vitis_vinifera_PN40024.gff3",
+    "targets": "vitis_drought_leaf_targets.csv",
     "chromosomes": [
     "chr01", "chr02", "chr03", "chr04",
     "chr05", "chr06", "chr07", "chr08", 
