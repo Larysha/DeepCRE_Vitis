@@ -4,6 +4,8 @@ sandbox_models/
 chpc_bin/
 figures/
 test_folder/
+blamm/
+code_snaps/
 
 # Ignore intermediate and model output files
 vitis_cre/src/genome/
@@ -14,14 +16,25 @@ vitis_cre/src/blast_results/
 vitis_cre/src/results/
 vitis_cre/src/saved_models/
 vitis_cre/src/tpm_counts/
+vitis_cre/src/tomtom/
+vitis_cre/src/jaspar/
+
 
 # Ignore common junk
 __pycache__/
+__init__.py
 *.pyc
 *.pyo
 *.log
 *.out
 *.err
+*.cursor
+*.png 
+*.lintr
+*.Rhistory
+*.Rproj
+*.log
+*.user
 
 # Ignore pickle files
 *.pickle
