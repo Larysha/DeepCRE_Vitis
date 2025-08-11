@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Extract gene sequences with flanking regions from genome
-# Creates BLAMM-compatible FASTA headers (simple IDs + metadata after whitespace)
+# Creates BLAMM-compatible FASTA headers (simple IDs + tab-separated metadata)
 # Adapted for moca_blue pipeline
 # Usage: ./extract_range_to_fasta.sh [species_model_name] [flank_size]
 
@@ -101,34 +101,21 @@ $3 ~ /gene/ {
         gene_id = chr "_" gene_start "_" gene_end
     }
     
-    # Try to extract gene name/symbol if available
-    gene_name = ""
-    if (match(attributes, /Name=([^;]+)/, arr)) {
-        gene_name = arr[1]
-    } else if (match(attributes, /gene_name[= ]"?([^;"]+)"?/, arr)) {
-        gene_name = arr[1]
-    }
-    
     # Create samtools range
     range = chr ":" flank_start "-" flank_end
     
-    # Create BLAMM-compatible header
-    # Format: Simple_ID [SPACE] metadata
-    # BLAMM reads only up to first whitespace for sequence ID
+    # Create BLAMM-compatible header following their exact format
+    # BLAMM examples: >BD1G00200\tBd1\t+\t8581-10580
     
     # Clean gene_id for BLAMM compatibility (alphanumeric + underscore only)
     clean_gene_id = gene_id
     gsub(/[^A-Za-z0-9_]/, "_", clean_gene_id)
     
-    # Create metadata string (everything after whitespace is ignored by BLAMM but useful for humans)
-    if (gene_name != "") {
-        metadata = "gene=" gene_id " name=" gene_name " chr=" chr " strand=" strand " coords=" gene_start "-" gene_end " flank=" flank "bp"
-    } else {
-        metadata = "gene=" gene_id " chr=" chr " strand=" strand " coords=" gene_start "-" gene_end " flank=" flank "bp"
-    }
+    # Create coordinate range for original gene (before flanking)
+    coord_range = gene_start "-" gene_end
     
-    # Final header: CleanID [SPACE] metadata
-    header = clean_gene_id " " metadata
+    # BLAMM format: ID\tchr\tstrand\tcoords
+    header = clean_gene_id "\t" chr "\t" strand "\t" coord_range
     
     # Print range for samtools and header info for post-processing
     print range "\t" header
@@ -173,7 +160,7 @@ with open(input_fasta, 'r') as infile, open(output_fasta, 'w') as outfile:
     for line in infile:
         if line.startswith('>'):
             # Replace header with BLAMM-compatible format
-            # Format: >CleanID metadata
+            # Format: >ID\tchr\tstrand\tcoords (tabs, not spaces)
             new_header = f">{headers[header_idx]}\n"
             outfile.write(new_header)
             header_idx += 1
@@ -202,13 +189,11 @@ rm "$RANGES_FILE" "${RANGES_FILE}.ranges" "${RANGES_FILE}.headers" "${OUTPUT_FAS
 
 echo "Output written to: $OUTPUT_FASTA"
 echo ""
-echo "BLAMM-compatible header format:"
-echo ">CleanGeneID gene=OriginalID name=GeneName chr=Chr strand=Strand coords=Start-End flankXXXbp"
-echo ""
-echo "BLAMM will use only the CleanGeneID (before first space) for sequence identification"
-echo "The metadata after the space is for human reference and coordinate mapping"
+echo "BLAMM-compatible header format (tab-separated):"
+echo ">GeneID<TAB>Chr<TAB>Strand<TAB>OriginalCoords"
+echo "Example: >Vitvi05_01chr00g00010	chr00	-	15635-16240"
 echo ""
 echo "Next steps:"
 echo "1. Run BLAMM motif scanning on $OUTPUT_FASTA"
 echo "2. BLAMM coordinates will be relative to extracted sequences, not genome"
-echo "3. Use metadata in headers to map back to genomic coordinates if needed"
+echo "3. Use coordinate info in headers to map back to genomic positions"
