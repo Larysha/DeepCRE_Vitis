@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Extract gene sequences with flanking regions from genome
-# Handles both GFF3 and GTF formats with rich metadata headers
+# Creates BLAMM-compatible FASTA headers (simple IDs + metadata after whitespace)
 # Adapted for moca_blue pipeline
 # Usage: ./extract_range_to_fasta.sh [species_model_name] [flank_size]
 
@@ -56,7 +56,9 @@ echo "Found genome: $GENOME_PATH"
 echo "Found annotation: $ANNOTATION_PATH"
 echo "Using flank size: ${FLANK_SIZE}bp"
 
-OUTPUT_DIR="results/moca_blue/ref_seq"
+# Get the script's directory and build path relative to it
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+OUTPUT_DIR="$SCRIPT_DIR/../../results/moca_blue/ref_seq"
 mkdir -p "$OUTPUT_DIR"
 
 RANGES_FILE="gene_ranges_${FLANK_SIZE}bp.txt"
@@ -67,7 +69,7 @@ OUTPUT_FASTA="${OUTPUT_DIR}/${SPECIES_MODEL}_${FLANK_SIZE}bp_flanks.fa"
 start_time=$(date +%s)
 echo "Extracting gene ranges with metadata..."
 
-# extract gene ranges with metadata for rich headers
+# extract gene ranges with metadata for BLAMM-compatible headers
 # creates both ranges file and metadata for header construction
 awk -v flank="$FLANK_SIZE" '
 BEGIN { OFS="\t" }
@@ -110,13 +112,23 @@ $3 ~ /gene/ {
     # Create samtools range
     range = chr ":" flank_start "-" flank_end
     
-    # Create rich header information
-    # Format: GeneID|GeneName|Chr|Strand|OriginalGeneCoords|FlankSize
+    # Create BLAMM-compatible header
+    # Format: Simple_ID [SPACE] metadata
+    # BLAMM reads only up to first whitespace for sequence ID
+    
+    # Clean gene_id for BLAMM compatibility (alphanumeric + underscore only)
+    clean_gene_id = gene_id
+    gsub(/[^A-Za-z0-9_]/, "_", clean_gene_id)
+    
+    # Create metadata string (everything after whitespace is ignored by BLAMM but useful for humans)
     if (gene_name != "") {
-        header = gene_id "|" gene_name "|" chr "|" strand "|" gene_start "-" gene_end "|flank" flank "bp"
+        metadata = "gene=" gene_id " name=" gene_name " chr=" chr " strand=" strand " coords=" gene_start "-" gene_end " flank=" flank "bp"
     } else {
-        header = gene_id "|" chr "|" strand "|" gene_start "-" gene_end "|flank" flank "bp"
+        metadata = "gene=" gene_id " chr=" chr " strand=" strand " coords=" gene_start "-" gene_end " flank=" flank "bp"
     }
+    
+    # Final header: CleanID [SPACE] metadata
+    header = clean_gene_id " " metadata
     
     # Print range for samtools and header info for post-processing
     print range "\t" header
@@ -142,24 +154,26 @@ samtools faidx "$GENOME_PATH" \
     --region-file "${RANGES_FILE}.ranges" \
     --output "${OUTPUT_FASTA}.tmp"
 
-
-echo "Adding gene metadata to FASTA headers..."
-# switch to Python for flexible header processing
-python3 - << 'EOF'
+echo "Adding BLAMM-compatible gene metadata to FASTA headers..."
+# Pass variables to Python script
+python3 - "$RANGES_FILE.headers" "$OUTPUT_FASTA.tmp" "$OUTPUT_FASTA" << 'EOF'
 import sys
 
+headers_file = sys.argv[1]
+input_fasta = sys.argv[2]
+output_fasta = sys.argv[3]
+
 # Read headers file
-with open("${RANGES_FILE}.headers", 'r') as f:
+with open(headers_file, 'r') as f:
     headers = [line.strip() for line in f]
 
 # Read and process FASTA
-with open("${OUTPUT_FASTA}.tmp", 'r') as infile, open("${OUTPUT_FASTA}", 'w') as outfile:
+with open(input_fasta, 'r') as infile, open(output_fasta, 'w') as outfile:
     header_idx = 0
     for line in infile:
         if line.startswith('>'):
-            # Replace header with rich annotation
-            # Original samtools header format: >chr1:start-end
-            # New format: >GeneID|GeneName|Chr|Strand|OriginalCoords|FlankInfo
+            # Replace header with BLAMM-compatible format
+            # Format: >CleanID metadata
             new_header = f">{headers[header_idx]}\n"
             outfile.write(new_header)
             header_idx += 1
@@ -174,7 +188,7 @@ if [[ ! -f "$OUTPUT_FASTA" ]]; then
 fi
 
 seq_count=$(grep -c "^>" "$OUTPUT_FASTA" || true)
-echo "Successfully extracted $seq_count sequences with rich headers"
+echo "Successfully extracted $seq_count sequences with BLAMM-compatible headers"
 
 echo "Example header format:"
 head -n 1 "$OUTPUT_FASTA"
@@ -188,9 +202,13 @@ rm "$RANGES_FILE" "${RANGES_FILE}.ranges" "${RANGES_FILE}.headers" "${OUTPUT_FAS
 
 echo "Output written to: $OUTPUT_FASTA"
 echo ""
-echo "Header format: >GeneID|GeneName|Chr|Strand|OriginalGeneCoords|FlankSize"
-echo "This provides gene context while keeping coordinate mapping simple"
+echo "BLAMM-compatible header format:"
+echo ">CleanGeneID gene=OriginalID name=GeneName chr=Chr strand=Strand coords=Start-End flankXXXbp"
+echo ""
+echo "BLAMM will use only the CleanGeneID (before first space) for sequence identification"
+echo "The metadata after the space is for human reference and coordinate mapping"
 echo ""
 echo "Next steps:"
 echo "1. Run BLAMM motif scanning on $OUTPUT_FASTA"
-echo "2. Remember: BLAMM coordinates will be relative to extracted sequences, not genome"
+echo "2. BLAMM coordinates will be relative to extracted sequences, not genome"
+echo "3. Use metadata in headers to map back to genomic coordinates if needed"
