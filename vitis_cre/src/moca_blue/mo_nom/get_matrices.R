@@ -153,12 +153,10 @@ process_pfm_matrices <- function(seq_matrices, seqlet_counts) {
 
 #######################################################
 
-# NB: wondering if I should change the background frequency to match Vitis vinifera genome composition??
-# ~34% GC content, so would change to c(0.33, 0.17, 0.17, 0.33))
-# This is based on BLAMM estimate background frequencies
-# however keeping the original background frequencies for now...
-process_pwm_matrices <- function(seq_matrices, background_freq = c(0.25, 0.25, 0.25, 0.25)) {
-  # Convert sequence frequency counts to Position Weight Matrices (log-odds scores)
+process_pwm_matrices <- function(seq_matrices, seqlet_counts) {
+  # Convert sequence frequency counts to proper frequency matrices for BLAMM
+  # NOTE: Despite the name "PWM", BLAMM expects raw frequency counts (like PFMs)
+  # This matches the original script behavior where "PWMs" were actually frequency matrices
   processed <- list()
   
   for (metacluster_name in names(seq_matrices)) {
@@ -169,25 +167,18 @@ process_pwm_matrices <- function(seq_matrices, background_freq = c(0.25, 0.25, 0
       
       for (pattern_name in names(matrices)) {
         matrix <- matrices[[pattern_name]]
+        count <- seqlet_counts[[metacluster_name]][[pattern_name]]
         
-        # Normalise to probabilities (these are frequency counts, not probabilities)
-        matrix_norm <- sweep(matrix, 2, colSums(matrix), "/")
+        # MULTIPLY BY SEQLET COUNT — converts normalised frequencies back to actual counts
+        # This gives us the raw frequency matrix (same as PFM processing)
+        # Despite being called "PWM", this is a freq matrix of sorts
+        freq_matrix <- matrix * count
         
-        # Add pseudocount proportional to background (used same as original scripts)
-        pseudocount <- 0.1  # Conservative pseudocount
-        matrix_pseudo <- sweep(matrix_norm, 1, background_freq * pseudocount, "+")
+        # Optional: Add small pseudocount to avoid zeros (like original script)
+        pseudocount <- 0.1
+        freq_matrix <- freq_matrix + pseudocount
         
-        # Re-normalise after adding pseudocount
-        matrix_norm <- sweep(matrix_pseudo, 2, colSums(matrix_pseudo), "/")
-        
-        # Convert to log-odds scores
-        pwm <- log2(sweep(matrix_norm, 1, background_freq, "/"))
-        
-        # Clip extreme values to prevent BLAMM explosion / exponential calcs that explode to infinity 
-        pwm <- pmax(pmin(pwm, 3), -3)  # Limits to 8-fold enrichment/depletion
-        # most TFs show 2-5 fold enrichment, so this is reasonable - beyond that may be overfitting
-        
-        processed[[metacluster_name]][[strand]][[pattern_name]] <- pwm
+        processed[[metacluster_name]][[strand]][[pattern_name]] <- freq_matrix
       }
     }
   }
