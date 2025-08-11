@@ -1,3 +1,6 @@
+
+
+
 import numpy as np
 import pandas as pd
 import os
@@ -5,9 +8,9 @@ from tensorflow.keras.models import load_model #type:ignore
 from typing import List, Tuple, Dict, Any, Union
 import argparse
 
-from train_models import extract_genes_prediction
+from vitis_cre.src.train_models import extract_genes_prediction
 from vitis_cre.src.utils import make_absolute_path, load_input_files, get_filename_from_path, get_time_stamp, result_summary
-from parsing import ParsedInputs, RunInfo
+from vitis_cre.src.parsing import ParsedInputs, RunInfo
 
 
 def load_models(model_names: List[str]) -> Dict[str, Any]:

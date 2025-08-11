@@ -1,3 +1,9 @@
+'''
+This is an optional script (written after DeepCRE reimplementation) to extract motifs from modisco results.
+It generates visualizations of motifs and saves them in a structured format.
+Moca_blue pipeline can run without it
+'''
+
 import os
 import h5py 
 import numpy as np
