@@ -220,11 +220,11 @@ Filters mapping results and provides performance analysis of discovered regulato
 ### Motif Nomenclature
 
 ```
-epm_vitis_ssr_pattern0_metacluster0_rev_42seqlets
-│   │     │   │        │            │   │
-│   │     │   │        │            │   └─ Supporting evidence
-│   │     │   │        │            └─ Strand orientation  
-│   │     │   │        └─ Expression association
+epm_vitis_ssr_0_0_F_3432
+│   │     │   │ | │  │
+│   │     │   │ | │  └─ Supporting evidence (no. "seqlets")
+│   │     │   │ | └─ Strand orientation  
+│   │     │   │ |─ Expression association
 │   │     │   └─ Pattern identifier
 │   │     └─ Model name
 │   └─ Species identifier
@@ -326,4 +326,4 @@ If you use moca_blue in your research, please cite:
 ---
 
 **Note:** This pipeline is under development. Please check for updates and report any issues through the GitHub repository.
-**Contact**: larysha.@sun.ac.za
+**Contact**: larysha@sun.ac.za
