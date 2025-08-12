@@ -219,7 +219,7 @@ cat("Processing PFMs...\n")
 pfm_processed <- process_pfm_matrices(sequence_matrices, seqlet_counts)
 
 cat("Processing PWMs...\n")
-pwm_processed <- process_pwm_matrices(sequence_matrices)  # Note: use sequence_matrices, not pfm_processed
+pwm_processed <- process_pwm_matrices(sequence_matrices, seqlet_counts)
 
 cat("Processing CWMs...\n")
 cwm_processed <- process_cwm_matrices(cwm_matrices, seqlet_counts)
