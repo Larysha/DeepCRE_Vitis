@@ -106,9 +106,10 @@ project_root/
 │   ├── ref_seq/              # Reference mapping
 │   ├── mo_proj/              # Genomic projection
 │   └── utils.R               # Shared utilities
-├── results/moca_blue/        # Pipeline outputs
-├── modisco/                  # TF-MoDISco inputs
-├── shap/                     # SHAP interpretation files
+├── results
+|   ├── moca_blue/            # Pipeline outputs
+|   ├── modisco/              # TF-MoDISco inputs
+|   ├── shap/                 # SHAP interpretation files
 └── genome/                   # Reference sequences
 ```
 
