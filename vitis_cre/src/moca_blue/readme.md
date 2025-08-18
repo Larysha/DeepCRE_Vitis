@@ -8,7 +8,7 @@
 
 **This repository:** Contains refactored and organised versions of the original moca_blue scripts, adapted for water stress studies in *Vitis vinifera* gene regulatory networks.
 
-**Scope of changes:** Enhanced reproducibility, improved error handling, modular organisation, and adaptation for *Vitis* genomic resources. Core algorithms and methodology remain unchanged from the original implementation for now - although additions may be included in future versions.
+**Scope of changes:** Enhanced reproducibility, improved error handling, modular organisation, and adaptation for *Vitis* genomic resources. Core algorithms and methodology remain unchanged from the original implementation for now.
 
 ---
 
