@@ -91,7 +91,7 @@ bash moca_blue/ref_seq/extract_range_to_fasta.sh vitis_vinifera_PN40024
 bash moca_blue/ref_seq/blamm_motif_mapping.sh vitis_vinifera_PN40024
 
 # 6. Filter and analyse mappings
-Rscript moca_blue/mo_proj/occ_filter_v1.1.R
+# still working with these scripts
 ```
 
 ### Project Structure
@@ -244,12 +244,10 @@ epm_vitis_ssr_0_0_F_3432
 - Information content (bits)
 - Consensus sequence confidence
 
-## Advanced Usage
-
-### Custom Species
+## Changing the species & model
 
 ```bash
-# Modify parameters for new species
+# Modify parameters 
 SPECIES="arabidopsis"
 MODEL="msr" # note I haven't tested the msr model yet
 
@@ -279,32 +277,6 @@ moca_blue seamlessly integrates with the DeepCRE pipeline:
 3. Run TF-MoDISco feature extraction
 4. Process outputs with moca_blue pipeline
 
-## Troubleshooting
-
-### Common Issues
-
-**BLAMM parsing errors:**
-- Verify JASPAR format compliance
-- Check for non-integer values in PFM matrices
-- Ensure tab-separated headers
-
-**Memory limitations:**
-- Use file chunking for large BLAMM outputs
-- Monitor disk usage during motif mapping
-- Consider conservative p-value thresholds
-
-**Coordinate mismatches:**
-- Verify consistent genome assemblies
-- Check chromosome naming conventions
-- Validate GFF3 coordinate systems
-
-### Performance Optimisation
-
-**Large datasets:**
-```bash
-# Process BLAMM output in chunks
-bash moca_blue/ref_seq/split_file.sh occurrences.txt 1000000
-```
 
 ## Citation
 
@@ -314,17 +286,6 @@ If you use moca_blue in your research, please cite:
 - **Original moca_blue scripts:** Dr Simon M. Zumkeller, NAMlab (https://github.com/NAMlab/DeepCRE/tree/main/moca_blue)
 - **TF-MoDISco:** Shrikumar et al. (2020). Nature Machine Intelligence
 
-
-
-
-## Acknowledgements
-
-- **Original moca_blue scripts:** Dr Simon M. Zumkeller, NAMlab
-- **DeepCRE framework:** Peleke et al., Nature Communications (2024)
-- **BLAMM motif scanner:** Biointec Lab, Ghent University
-- **TF-MoDISco:** Kundaje Lab, Stanford University
-
 ---
 
-**Note:** This pipeline is under development. Please check for updates and report any issues through the GitHub repository.
-**Contact**: larysha@sun.ac.za
+**Note:** This pipeline is under development 
