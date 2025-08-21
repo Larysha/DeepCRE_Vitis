@@ -12,10 +12,12 @@ from vitis_cre.src.parsing import ParsedInputs, RunInfo
   Usage Examples:
 
   Single analysis:
-  python create_generic_features.py --genome vitis_vinifera_PN40024_dna.fa --annotation vitis_vinifera_PN40024.gff3 --output vitis_analysis
+  python create_generic_features.py --genome vitis_vinifera_PN40024_dna.fa \
+    --annotation vitis_vinifera_PN40024.gff3 --output vitis_analysis
 
   Batch processing:
-  python create_generic_features.py --input inputs/vitis_training.json
+  python -m vitis_cre.src.create_generic_features \
+    --input vitis_cre/src/inputs/vitis_training.json
 """
 
 
