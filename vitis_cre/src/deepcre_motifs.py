@@ -36,16 +36,16 @@ def modisco_run(contribution_scores: np.ndarray, hypothetical_scores: np.ndarray
 
     null_per_pos_scores = modisco.coordproducers.LaplaceNullDist(num_to_samp=5000)
     tfmodisco_results = modisco.tfmodisco_workflow.workflow.TfModiscoWorkflow(
-        # Slight modifications from the default settings
-        sliding_window_size=15,
-        flank_size=5,
-        target_seqlet_fdr=0.15,
+    # adjustments made from original: smaller sliding window, less stringent FDR, halved min cluster size
+        sliding_window_size=17, # smaller window = looking for shorter motifs 
+        flank_size=5, # adds seq context
+        target_seqlet_fdr=0.05, # false discovery rate threshold - set at an intermediate threshold
         seqlets_to_patterns_factory=modisco.tfmodisco_workflow.seqlets_to_patterns.TfModiscoSeqletsToPatternsFactory(
             trim_to_window_size=10,
             initial_flank_to_add=2,
             final_flank_to_add=0,
-            final_min_cluster_size=30,
-            n_cores=2
+            final_min_cluster_size=60, # need at least X no. of seqlets to be retrained (higher = more stringent)
+            n_cores=5
         )
     )(
         task_names=['task0'],
