@@ -55,8 +55,8 @@ output_dir_plots <- if (length(args) >= 4) args[4] else "results/moca_blue/mo_im
 output_dir_scores <- if (length(args) >= 5) args[5] else "results/moca_blue/mo_imp/importance_scores"
 
 # Define analysis window - (kept same as original script)
-window_start <- 750
-window_end <- 1500
+window_start <- 700
+window_end <- 1300
 
 # Create output directories
 dir.create(output_dir_plots, showWarnings = FALSE, recursive = TRUE)

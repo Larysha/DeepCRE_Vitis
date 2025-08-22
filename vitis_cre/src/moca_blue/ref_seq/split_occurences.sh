@@ -9,8 +9,7 @@ set -euo pipefail
 # Default parameters
 DEFAULT_PROJECT="vitis_stress_02"
 DEFAULT_CHUNK_SIZE="1000000"
-DEFAULT_INPUT="/home/rish/phd_2025/deepcre_vitis/vitis_cre/src/results/\
-moca_blue/mo_proj/vitis_vinifera_PN40024_1000bp_pt0.0001/occurrences.txt"
+DEFAULT_INPUT="/home/rish/phd_2025/deepcre_vitis/vitis_cre/src/results/moca_blue/mo_proj/genomic_vitis_vinifera_PN40024_1000bp_pt0.0001/occurrences.txt"
 
 # Command line arguments with defaults
 PROJECT_ID="${1:-$DEFAULT_PROJECT}"
