@@ -1,8 +1,6 @@
 #!/usr/bin/env Rscript
-# filter_blamm_genomic_occurrences.R
 # Filters BLAMM genomic coordinate occurrence results using biologically meaningful criteria
 # Enhanced from occ_filter_v1.1.R for genomic coordinate workflow
-# DeepCRE/moca_blue/mo_proj
 ######################
 
 library(tidyr)
@@ -75,6 +73,19 @@ load_gene_annotations <- function(annotation_file) {
     select(gene_id, seqname, start, end, strand) %>%
     rename(chr = seqname, gene_start = start, gene_end = end, gene_strand = strand)
   
+  # DEBUG: Check gene annotation loading
+  cat("DEBUG - Gene annotations loaded:\n")
+  cat("  Total genes:", nrow(genes), "\n")
+  gene_chr_counts <- table(genes$chr)
+  cat("  Genes per chromosome:\n")
+  for (chr in names(gene_chr_counts)) {
+    cat("    ", chr, ":", gene_chr_counts[chr], "\n")
+  }
+  
+  # Check for chromosomes 12-16 specifically
+  chr_12_16 <- genes$chr %in% c("chr12", "chr13", "chr14", "chr15", "chr16")
+  cat("  Genes on chr12-16:", sum(chr_12_16), "\n")
+  
   cat("Loaded", nrow(genes), "gene annotations\n")
   return(genes)
 }
@@ -121,6 +132,22 @@ filter_genomic_occurrences <- function(file_paths, output_file, gene_annotations
     # Set column names based on BLAMM genomic output format
     colnames(occurrence_df) <- c("gene_id", "source", "motif", "mstart", "mend", 
                                 "score", "strand", "V7", "V8")
+    
+    # DEBUG: Check BLAMM data loading for this file
+    cat("    BLAMM data for file", i, ":\n")
+    cat("      Total occurrences:", nrow(occurrence_df), "\n")
+    
+    # Extract chromosome from gene_id for debugging
+    occurrence_df$debug_chr <- gsub(".*chr(\\d+)g.*", "chr\\1", occurrence_df$gene_id)
+    blamm_chr_counts <- table(occurrence_df$debug_chr)
+    cat("      Occurrences per chromosome:\n")
+    for (chr in names(blamm_chr_counts)) {
+      if (chr %in% c("chr12", "chr13", "chr14", "chr15", "chr16")) {
+        cat("        ", chr, ":", blamm_chr_counts[chr], " *** \n")
+      } else {
+        cat("        ", chr, ":", blamm_chr_counts[chr], "\n")
+      }
+    }
     
     # Count input occurrences
     file_input_count <- nrow(occurrence_df)

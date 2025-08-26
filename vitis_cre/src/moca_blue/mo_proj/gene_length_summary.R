@@ -1,4 +1,4 @@
-# Quick analysis to check if filtering rate matches gene length distribution
+# Quick analysis to check if filtering rate (from filter_balmm_occ.R) matches gene length distribution
 
 library(dplyr)
 
