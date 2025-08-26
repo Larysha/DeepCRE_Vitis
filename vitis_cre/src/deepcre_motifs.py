@@ -44,7 +44,7 @@ def modisco_run(contribution_scores: np.ndarray, hypothetical_scores: np.ndarray
             trim_to_window_size=10,
             initial_flank_to_add=2,
             final_flank_to_add=0,
-            final_min_cluster_size=60, # need at least X no. of seqlets to be retrained (higher = more stringent)
+            final_min_cluster_size=40, # need at least X no. of seqlets to keep motif (higher = more stringent)
             n_cores=5
         )
     )(
