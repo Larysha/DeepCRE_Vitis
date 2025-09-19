@@ -1,0 +1,24 @@
+# Ignore large data repositories (inputs and outputs)
+vitis_data/
+out/
+jupyter_sandbox/
+
+# specific input files
+src/deepcre/inputs/
+
+# common junk
+__pycache__/
+*.pyc
+*.pyo
+*.log
+*.out
+*.err
+*.cursor
+*.png
+*.lintr
+*.Rhistory
+*.Rproj
+*.user
+*.npy
+*.pickle
+CLAUDE.md
