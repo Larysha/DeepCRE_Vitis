@@ -17,7 +17,7 @@ args <- commandArgs(trailingOnly = TRUE)
 
 # Default file paths for genomic coordinate workflow
 default_blamm_dir <- "../../../out/moca_results/mo_proj/genomic_vitis_vinifera_PN40024_1000bp_pt0.0001"
-default_output_dir <- "../../../out/moca_results/mo_proj"
+default_output_dir <- "../../../out/moca_results/mo_proj/filtering/"
 default_output_file <- "filtered_genomic_occurrences.txt"
 
 # Parse arguments

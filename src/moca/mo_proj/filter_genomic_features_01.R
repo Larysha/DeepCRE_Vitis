@@ -17,8 +17,8 @@ source("../utils.R")
 args <- commandArgs(trailingOnly = TRUE)
 
 # Default file paths
-default_input_file <- "../../../out/moca_results/mo_proj/filtered_genomic_occurrences.txt"
-default_output_dir <- "../../../out/moca_results/mo_proj"
+default_input_file <- "../../../out/moca_results/mo_proj/filtering/filtered_genomic_occurrences.txt"
+default_output_dir <- "../../../out/moca_results/mo_proj/filtering/"
 default_tss_ranges <- "../../../out/moca_results/mo_range/vitisssr-TSS_motif_ranges_q1q9.csv"
 default_tts_ranges <- "../../../out/moca_results/mo_range/vitisssr-TTS_motif_ranges_q1q9.csv"
 default_annotation_file <- "../../../vitis_data/gene_models/vitis_vinifera_PN40024.gff3"
@@ -31,7 +31,7 @@ TTS_RANGES <- if (length(args) >= 4 && nzchar(args[4])) args[4] else default_tts
 ANNOTATION_FILE <- if (length(args) >= 5 && nzchar(args[5])) args[5] else default_annotation_file
 
 # Filtering parameters
-WEIGHT_REGION_FILTER <- TRUE  # Apply 20% minimum representation threshold
+WEIGHT_REGION_FILTER <- TRUE  # Apply 20% minimum representation threshold (AND logic)
 WORD_SIZE_FILTER <- 14       # Minimum motif length in bp
 DATE_STAMP <- format(Sys.Date(), "%Y%m%d")
 
@@ -175,7 +175,6 @@ apply_feature_filtering <- function(input_file, motif_ranges, weight_filter, wor
       " unique motifs have seqlet statistics\n")
   
   # STEP 2: Add legacy upstream/downstream classification
-  # This maintains compatibility with original mo_feat-filter scripts
   cat("\nStep 2: Adding upstream/downstream classification...\n")
   motif_data <- motif_data %>%
     mutate(
@@ -239,29 +238,29 @@ apply_feature_filtering <- function(input_file, motif_ranges, weight_filter, wor
   weight_filtered <- quartile_filtered
   
   if (weight_filter) {
-    cat("\nStep 4: Applying weight region filtering (20% threshold)...\n")
-    
-    # Calculate weight regions to exclude
+    cat("\nStep 4: Applying weight region filtering (20% threshold - AND logic)...\n")
+
+    # Calculate weight regions to exclude using AND logic
+    # Only exclude motifs that have <20% representation in BOTH regions
     weight_exclusions <- data.frame()
-    
+
     # Check each motif's regional representation
     for (epm in unique(quartile_filtered$epm)) {
       # Get counts for this motif in TSS and TTS
       tss_count <- motif_ranges$tss %>% filter(epm == !!epm) %>% pull(number)
       tts_count <- motif_ranges$tts %>% filter(epm == !!epm) %>% pull(number)
-      
+
       if (length(tss_count) > 0 && length(tts_count) > 0) {
         total_count <- tss_count + tts_count
         tss_percent <- tss_count / total_count
         tts_percent <- tts_count / total_count
-        
-        # Flag regions with <20% representation
-        if (tss_percent < 0.20) {
-          weight_exclusions <- rbind(weight_exclusions, 
-                                   data.frame(epm = epm, region = "upstream"))
-        }
-        if (tts_percent < 0.20) {
+
+        # AND logic: Only exclude if BOTH regions have <20% representation
+        # This preserves specialized motifs that are >20% in at least one region
+        if (tss_percent < 0.20 && tts_percent < 0.20) {
+          # Exclude this motif from BOTH regions since it's under-represented everywhere
           weight_exclusions <- rbind(weight_exclusions,
+                                   data.frame(epm = epm, region = "upstream"),
                                    data.frame(epm = epm, region = "downstream"))
         }
       }

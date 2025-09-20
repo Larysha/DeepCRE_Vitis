@@ -1,7 +1,22 @@
 #!/usr/bin/env Rscript
 # Motif Performance Analysis and Visualization
 # Part 2 of 2-script motif analysis pipeline (uses outputs from motif_enrichment.R)
-# Generates performance rankings, visualizations, and comprehensive reports
+# setwd("/home/rish/phd_2025/deepcre_vitis/vitis_cre/src/moca/mo_proj")
+######################
+#
+# SCRIPT OVERVIEW: This script transforms enrichment analysis results into performance metrics
+#
+# CORE INTEGRATION LOGIC:
+# 1. Loads enrichment results from motif_enrichment_03.R as "performance metrics"
+# 2. Uses enrichment scores (importance_score) as the PRIMARY ranking system
+# 3. Validates model predictions on genes containing biologically-ranked motifs
+# 4. Creates dual validation: biological relevance + technical performance
+# 5. Generates comprehensive visualizations and performance reports
+#
+# This script RANKS all motifs by biological enrichment strength
+# Then evaluates model performance on genes containing these ranked motifs
+#
+# PERFORMANCE DEFINITION: Biological relevance (enrichment) + Technical accuracy (predictions)
 ######################
 
 library(tidyr)
@@ -21,15 +36,15 @@ args <- commandArgs(trailingOnly = TRUE)
 
 # Default file paths for Vitis analysis - find files by pattern
 # Find most recent enrichment results files
-enrichment_pattern <- "../../../out/moca_results/mo_proj/*_vitis_motif_enrichment_results.csv"
+enrichment_pattern <- "../../../out/moca_results/mo_proj/enrichment/*_vitis_motif_enrichment_results.csv"
 enrichment_files <- Sys.glob(enrichment_pattern)
 default_enrichment_results <- if (length(enrichment_files) > 0) sort(enrichment_files, decreasing = TRUE)[1] else enrichment_pattern
 
-integrated_pattern <- "../../../out/moca_results/mo_proj/*_vitis_motif_enrichment_integrated_data.csv"
+integrated_pattern <- "../../../out/moca_results/mo_proj/enrichment/*_vitis_motif_enrichment_integrated_data.csv"
 integrated_files <- Sys.glob(integrated_pattern)
 default_integrated_data <- if (length(integrated_files) > 0) sort(integrated_files, decreasing = TRUE)[1] else integrated_pattern
 
-state_pattern <- "../../../out/moca_results/mo_proj/*_vitis_motif_enrichment_analysis_state.rds"
+state_pattern <- "../../../out/moca_results/mo_proj/enrichment/*_vitis_motif_enrichment_analysis_state.rds"
 state_files <- Sys.glob(state_pattern)
 default_analysis_state <- if (length(state_files) > 0) sort(state_files, decreasing = TRUE)[1] else state_pattern
 
@@ -46,7 +61,7 @@ DATE_STAMP <- format(Sys.Date(), "%Y%m%d")
 PROJECT_NAME <- "vitis_motif_performance"
 
 # Custom color palette
-CUSTOM_COLORS <- c("#671436", "#e1c7cd", "#052b67", "#1d778b")
+CUSTOM_COLORS <- c("#671436", "#9e757f", "#052b67", "#176272")
 # Generate additional colors if needed
 EXTENDED_COLORS <- c(CUSTOM_COLORS, "#ad597e", "#66967b", "#808000", "#657b9e", "#8d77ab")
 
@@ -64,27 +79,33 @@ cat("  Output directory:", OUTPUT_DIR, "\n")
 cat("  Project:", PROJECT_NAME, "\n")
 cat("  Date:", DATE_STAMP, "\n\n")
 
-#' Load enrichment analysis results and integrated data for performance analysis
-#' 
-#' This function loads the outputs from motif_enrichment.R, including
-#' calculated metrics, integrated data, and analysis state.
-#' 
+#' Load enrichment analysis results and transform them into performance metrics
+#'
+#' CRITICAL INTEGRATION: This is where enrichment becomes "performance"
+#' - Loads enrichment metrics → becomes performance rankings
+#' - Loads integrated data → enables gene-level model validation
+#' - Preserves analysis state → maintains pipeline continuity
+#'
 #' @param enrichment_file Path to enrichment results CSV
-#' @param integrated_file Path to integrated data CSV  
+#' @param integrated_file Path to integrated data CSV
 #' @param state_file Path to analysis state RDS file
 #' @return List containing loaded enrichment data and analysis state
 load_performance_data <- function(enrichment_file, integrated_file, state_file) {
-  
+
   cat("Loading performance analysis datasets from enrichment analysis...\n")
-  
-  # Load enrichment results
+
+  # STEP 1: Load enrichment metrics as "performance metrics"
+  # KEY TRANSFORMATION: enrichment scores become performance rankings
+  # Each row = one motif with its biological relevance score (importance_score)
   if (!file.exists(enrichment_file)) {
     stop("Enrichment results file not found: ", enrichment_file)
   }
   enrichment_metrics <- read.csv(enrichment_file, stringsAsFactors = FALSE)
   cat("  Loaded", nrow(enrichment_metrics), "motif enrichment results\n")
-  
-  # Load integrated data
+
+  # STEP 2: Load integrated data for gene-level model validation
+  # Each row = one motif occurrence + gene expression + model prediction
+  # This enables validation of model performance on genes containing ranked motifs
   if (!file.exists(integrated_file)) {
     stop("Integrated data file not found: ", integrated_file)
   }
@@ -128,29 +149,32 @@ load_performance_data <- function(enrichment_file, integrated_file, state_file) 
   ))
 }
 
-#' Generate comprehensive performance visualizations
-#' 
-#' Creates multiple plots showing motif performance, rankings, and distributions
-#' using the custom color palette.
-#' 
-#' @param performance_metrics Data frame with calculated performance metrics
-#' @param integrated_data Full integrated dataset
+#' Generate comprehensive performance visualizations based on enrichment rankings
+#'
+#' VISUALIZATION LOGIC: All plots use enrichment-based performance metrics
+#' - Performance metrics = enrichment scores from biological analysis
+#' - Rankings based on importance_score (log2 fold-change enrichment)
+#' - Model validation overlaid on biologically-ranked motifs
+#'
+#' @param performance_metrics Data frame with enrichment-based performance metrics
+#' @param integrated_data Full integrated dataset with gene-level predictions
 #' @param output_dir Directory for saving plots
 #' @param pred_available Whether prediction data is available
 #' @return List of ggplot objects
 generate_performance_plots <- function(performance_metrics, integrated_data, output_dir, pred_available = TRUE) {
-  
+
   cat("\nGenerating performance visualizations...\n")
-  
+
   plot_list <- list()
-  
-  # 1. Importance Score Distribution by Metacluster
-  plot_list$importance_dist <- ggplot(performance_metrics, 
-                                     aes(x = factor(metacluster), y = importance_score, 
+
+  # PLOT 1: Distribution of biological enrichment scores by motif type
+  # Shows how well p0m vs p1m motifs follow their biological expectations
+  plot_list$importance_dist <- ggplot(performance_metrics,
+                                     aes(x = factor(metacluster), y = importance_score,
                                          fill = factor(metacluster))) +
     geom_boxplot(alpha = 0.7) +
     geom_jitter(width = 0.2, alpha = 0.6, size = 1) +
-    scale_fill_manual(values = CUSTOM_COLORS[1:2], 
+    scale_fill_manual(values = CUSTOM_COLORS[1:2],
                      labels = c("p0m (High-expr)", "p1m (Low-expr)")) +
     labs(title = "Motif Importance Scores by Metacluster",
          subtitle = "Log2 enrichment in expected expression class",
@@ -158,13 +182,14 @@ generate_performance_plots <- function(performance_metrics, integrated_data, out
          fill = "Metacluster") +
     theme_minimal() +
     theme(legend.position = "bottom")
-  
-  # 2. Top Performing Motifs
-  # No occurrence filtering - only require valid importance scores with pseudocounts
+
+  # PLOT 2: Top performing motifs - RANKED BY BIOLOGICAL ENRICHMENT
+  # CRITICAL INSIGHT: This ranks motifs by biological relevance, NOT by significance filtering
+  # Shows the top motifs based on how well they follow biological expectations
   top_motifs <- performance_metrics %>%
-    filter(!is.na(importance_score)) %>%  # Only filter for valid importance scores
-    arrange(desc(importance_score)) %>%
-    slice_head(n = 20)
+    filter(!is.na(importance_score)) %>%  # Only exclude motifs with calculation errors
+    arrange(desc(importance_score)) %>%   # RANK by enrichment strength 
+    slice_head(n = 20)                   # Take top 20 regardless of significance status
   
   # Debug info - investigate motif availability
   cat("  Debug: Total motifs in performance_metrics:", nrow(performance_metrics), "\n")
@@ -357,28 +382,30 @@ generate_performance_plots <- function(performance_metrics, integrated_data, out
   return(plot_list)
 }
 
-#' Calculate overall model performance metrics
-#' 
-#' Computes accuracy, F1 score, precision, recall, and other classification metrics
-#' for the expression prediction model.
-#' 
-#' @param integrated_data Integrated dataset with predictions and actual values
+#' Calculate model performance on genes containing biologically-ranked motifs
+#' This evaluates how well the CNN model predicts expression on genes
+#' that contain the motifs ranked by enrichment analysis.
+#'
+#'
+#' @param integrated_data Integrated dataset with motif-gene-expression-prediction associations
 #' @param pred_available Whether prediction data is available
-#' @return List of performance metrics
+#' @return List of model performance metrics
 calculate_model_performance <- function(integrated_data, pred_available = TRUE) {
-  
+
   cat("\nCalculating overall model performance...\n")
-  
+
   if (!pred_available) {
     cat("  Skipping model performance (predictions not available)\n")
     return(NULL)
   }
-  
-  # Create binary factors for caret
+
+  # Test model accuracy on genes containing enriched motifs
+  # This validates that the model performs well on the genes we've identified
+  # as containing biologically relevant motifs
   actual <- factor(integrated_data$expr_binary, levels = c("low", "high"))
   predicted <- factor(integrated_data$pred_binary, levels = c("low", "high"))
-  
-  # Calculate confusion matrix
+
+  # Standard classification performance metrics
   cm <- confusionMatrix(predicted, actual, positive = "high")
   
   # Extract key metrics
@@ -411,23 +438,27 @@ calculate_model_performance <- function(integrated_data, pred_available = TRUE) 
   return(performance_summary)
 }
 
-# Main execution
+# MAIN EXECUTION: The Core Integration Logic
 cat("Starting motif performance analysis pipeline...\n")
 
-# Load enrichment analysis results
+# STEP 1: Load enrichment analysis outputs
 data_list <- load_performance_data(ENRICHMENT_RESULTS, INTEGRATED_DATA, ANALYSIS_STATE)
 
-# Use the pre-calculated enrichment metrics as performance metrics
-performance_metrics <- data_list$enrichment_metrics
-integrated_data <- data_list$integrated_data
+# STEP 2: CRITICAL TRANSFORMATION - Enrichment becomes Performance
+# This is the key integration point where biological enrichment analysis
+# becomes the foundation for performance evaluation
+performance_metrics <- data_list$enrichment_metrics  # <-- ENRICHMENT SCORES = PERFORMANCE RANKINGS
+integrated_data <- data_list$integrated_data         # <-- GENE-LEVEL DATA FOR MODEL VALIDATION
 
-# Calculate overall model performance
+# STEP 3: Dual validation approach
+# A) Technical validation: How well does the model predict on genes with these motifs?
 model_performance <- calculate_model_performance(integrated_data, data_list$pred_available)
 
-# Generate visualizations
+# B) Biological validation: Visualizations showing enrichment-based rankings
 performance_plots <- generate_performance_plots(performance_metrics, integrated_data, OUTPUT_DIR, data_list$pred_available)
 
-# Generate comprehensive summary statistics by metacluster (following original V1.7)
+# STEP 4: Generate comprehensive summary statistics by biological relevance
+# Creates metacluster-level summaries based on enrichment analysis results
 metacluster_summary <- performance_metrics %>%
   group_by(metacluster) %>%
   summarise(
@@ -459,13 +490,15 @@ metacluster_summary <- performance_metrics %>%
                               mean_tpr_pred_low)
   )
 
-# Top performing motifs summary (following original V1.7 sorted output)
+# STEP 5: Create final top performers list - RANKED BY BIOLOGICAL ENRICHMENT
+# CRITICAL OUTPUT: This demonstrates the core principle of the pipeline
+# Motifs are ranked by biological relevance (enrichment), not by model accuracy
 top_performers_summary <- performance_metrics %>%
-  filter(!is.na(imp_expr_score)) %>%
-  arrange(desc(imp_expr_score)) %>%
-  select(epm, metacluster, total_occurrences, imp_expr_score, imp_pred_score, 
+  filter(!is.na(imp_expr_score)) %>%           # Only exclude calculation errors
+  arrange(desc(imp_expr_score)) %>%            # SORT BY BIOLOGICAL ENRICHMENT STRENGTH
+  select(epm, metacluster, total_occurrences, imp_expr_score, imp_pred_score,
          TPR_expected, TPR_correct, chi_expr_pval, chi_pred_pval, significance_expr) %>%
-  head(10)
+  head(10)                                     # Top 10 by enrichment (not significance)
 
 # Write output files
 output_base <- file.path(OUTPUT_DIR, paste0(DATE_STAMP, "_", PROJECT_NAME))
@@ -498,14 +531,17 @@ cat("\n", rep("=", 60), "\n", sep = "")
 cat("MOTIF PERFORMANCE ANALYSIS COMPLETED\n")
 cat(rep("=", 60), "\n\n", sep = "")
 
+# ANALYSIS SUMMARY: Demonstrating the Integration Approach
 cat("Analysis Summary (using enrichment results):\n")
 cat("  Total motifs analyzed:", nrow(performance_metrics), "\n")
-cat("  Significantly associated with expression:", 
+cat("  Significantly associated with expression:",
     sum(performance_metrics$significance_expr == "significant", na.rm = TRUE), "\n")
-cat("  Significantly associated with predictions:", 
+cat("  Significantly associated with predictions:",
     sum(performance_metrics$significance_pred == "significant", na.rm = TRUE), "\n")
-cat("  Top performing motif (expression):", performance_metrics$epm[1], 
-    "(imp_expr:", round(performance_metrics$imp_expr_score[1], 3), 
+
+# Show that top motif is ranked by biological enrichment, not significance
+cat("  Top performing motif (expression):", performance_metrics$epm[1],
+    "(imp_expr:", round(performance_metrics$imp_expr_score[1], 3),
     ", imp_pred:", round(performance_metrics$imp_pred_score[1], 3), ")\n")
 
 cat("\nMetacluster Summary Table:\n")
@@ -522,6 +558,24 @@ if (!is.null(model_performance)) {
 
 cat("\nOutput Directory:", OUTPUT_DIR, "\n")
 cat("Files Generated: Performance metrics, summaries, and visualizations\n")
+
+# PIPELINE SUMMARY: Explaining the Complete Integration Approach
+cat("\n", rep("=", 60), "\n", sep = "")
+cat("ENRICHMENT-PERFORMANCE INTEGRATION SUMMARY\n")
+cat(rep("=", 60), "\n", sep = "")
+cat("\nPIPELINE LOGIC DEMONSTRATED:\n")
+cat("1. Enrichment Analysis → Performance Rankings\n")
+cat("   - importance_score (enrichment) = primary ranking metric\n")
+cat("   - Motifs ranked by biological relevance, not model accuracy\n")
+cat("2. Dual Validation Approach:\n")
+cat("   - Biological: Do motifs follow p0m/p1m expression expectations?\n")
+cat("   - Technical: Does model predict well on genes with these motifs?\n")
+cat("3. No Significance Filtering:\n")
+cat("   - All motifs ranked (preserves full spectrum)\n")
+cat("   - Statistical significance noted but not used for filtering\n")
+cat("4. Integrated Performance:\n")
+cat("   - Combines biological relevance + technical validation\n")
+cat("   - Ensures both biological meaning and predictive utility\n")
 
 cat("\nSession Information:\n")
 cat("R version:", R.version.string, "\n")
