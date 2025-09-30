@@ -13,18 +13,20 @@ Adapted here for a V. vinifera drought stress study
 **Input**: TF-MoDISco HDF5 files from model interpretation  
 **Output**: Ranked regulatory motifs with genomic locations and functional annotations
 
-**Workflow**: Extract motifs → Analyse positions and importance → Cluster similarities → Map to genome → Validate motif and model performance
+**Workflow**: Extract motifs → Analyse positions and importance → Cluster similarities → Map to genome → Validate motif and model performance → Functional enrichment → Cross-genotype analysis
 
 ## Project Structure
 
 ```
 moca/
 ├── mo_nom/          # Extract motifs and assign names
-├── mo_imp/          # Visualise saliency maps  
+├── mo_imp/          # Visualise saliency maps
 ├── mo_range/        # Analyse positional preferences
 ├── mo_clu/          # Cluster similar motifs
 ├── ref_seq/         # Map motifs to genome sequences
 ├── mo_proj/         # Filter and validate performance
+├── mo_go/           # Functional enrichment and GO analysis
+├── mo_var/          # Cross-genotype motif variance analysis (in progress)
 └── utils.R          # Shared utilities
 ```
 
@@ -123,6 +125,79 @@ moca/
 - Top performer rankings
 - Model validation metrics (accuracy, F1, precision, recall)
 
+---
+
+### 7. `mo_go/` - Functional Enrichment Analysis
+**Purpose**: Integrate GO annotations with motif analysis to understand biological context and identify functionally coherent regulatory modules
+
+#### Core Scripts:
+
+**`convert_gene_ids.R`**: One-time gene ID standardisation
+- Converts GO annotation IDs to match motif analysis naming conventions
+- Builds hash table lookup from genome GFF3 for efficient conversion
+- Input: GO GMT format + genome annotation
+- Output: Converted GMT with standardised gene IDs
+
+**`mo_gene_mapper_vitis.R`**: Comprehensive gene-motif-function integration
+- Cross-references genes across expression data, model predictions, motif occurrences, and GO annotations
+- Calculates motif-GO enrichment statistics (observed/expected ratios with significance thresholds)
+- Identifies enriched (≥2-fold, ≥3 genes) and depleted (≤0.5-fold, ≥3 genes) associations
+- Generates gene sets organised by motif combinations and GO categories (≥3-5 genes per set)
+- Creates high-confidence gene sets with multiple lines of evidence
+
+**`motif_predictability_vitis.R`**: Context-dependent motif performance analysis
+- Evaluates motif predictive accuracy within specific GO categories (10-1000 genes per combination)
+- Compares GO-specific performance to baseline via fold change
+- Identifies enhanced (≥1.2-fold) and reduced (≤0.8-fold) performance contexts
+- Calculates True Positive Rates for expected expression classes (p0m→high, p1m→low)
+- Retains top 10,000 combinations for tractable analysis
+
+**`functional_enrichment.R`**: Statistical association testing
+- Creates contingency tables between motifs and GO categories
+- Integrates existing enrichment and performance results
+- Applies confidence filtering: |prob - 0.5| ≥ 0.1 for reliable predictions
+- Motif frequency threshold: ≥10 genes for statistical power
+- Calculates True Positive and True Negative prediction counts per motif-GO combination
+
+**Outputs**:
+- Gene-level integration tables with expression, predictions, motifs, and GO annotations
+- Motif-GO enrichment statistics with fold changes and significance flags
+- Context-dependent performance metrics (enhanced/reduced categories)
+- Gene sets for pathway analysis and experimental validation
+
+**Application**: Reveals whether motifs have context-dependent regulatory activity. A motif performing well globally but poorly in specific functions may indicate missing co-factors or chromatin state differences. Enhanced performance in specific functions strengthens biological relevance.
+
+---
+
+### 8. `mo_var/` - Cross-Genotype Variance Analysis
+**Purpose**: Analyse motif conservation and mutation patterns across multiple genotypes/varieties to understand regulatory variation underlying expression divergence
+
+**Status**: IN PROGRESS - Framework complete, awaiting multi-variety data
+
+#### Core Scripts:
+
+**`prepare_genotype_gene_lists.R`**: Data preparation and gene classification
+- Classifies genes based on CNN prediction variance across varieties (threshold: >0.005 = differential, ≤0.005 = uniform)
+- Extracts coordinates for differentially expressed (DE) and uniformly expressed (UE) gene sets
+- Prepares files for FASTA extraction and BLAMM mapping across genotypes
+
+**`genotype_variance_analysis.R`**: Conservation pattern analysis
+- Counts motif occurrences per gene per genotype
+- Classifies motifs as conserved (present in all genotypes) or mutated (variable across genotypes)
+- Bootstrap resampling for robust comparison (100 genes, 1000 iterations)
+- Statistical tests: Fisher's exact and Chi-squared (p < 0.0001)
+
+**Key Methodology** (from paper):
+- Uses CNN model predictions, not direct RNA-seq data
+- Validates that predicted differential expression correlates with regulatory variation
+- BLAMM parameters: e-value < 0.0001, word size 14bp
+- Critical filtering: EPMs must be within preferred positional ranges (from mo_range outputs)
+
+**Expected Results**:
+- DE genes should show enrichment for mutated motifs (regulatory divergence)
+- UE genes should show enrichment for conserved motifs (regulatory stability)
+
+**Application**: Identifies genotype-specific regulatory elements that may explain expression differences between varieties. Useful for understanding drought tolerance mechanisms across cultivars.
 
 ---
 
@@ -152,9 +227,10 @@ moca/
 ## Usage
 
 1. Set working directory to project root
-2. Run modules sequentially: `mo_nom → mo_range → mo_clu → ref_seq → mo_proj`
-3. Scripts auto-detect files based on naming conventions, but can also be specified as command line arguments (refer to script comments to see other customisable parameters)
-4. Outputs saved to `../../out/moca_results/[module_name]/`
+2. Run modules sequentially: `mo_nom → mo_range → mo_clu → ref_seq → mo_proj → mo_go`
+3. Optional: `mo_var` for cross-genotype analysis (requires multi-variety data)
+4. Scripts auto-detect files based on naming conventions, but can also be specified as command line arguments (refer to script comments to see other customisable parameters)
+5. Outputs saved to `../../out/moca_results/[module_name]/`
 
 ## Output Interpretation
 
