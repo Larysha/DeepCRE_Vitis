@@ -1,0 +1,12 @@
+# Ignore output data files
+*.txt
+*.csv
+*.pdf
+*.png
+*.rds
+
+# Keep documentation and scripts
+!README.md
+!QUICK_REFERENCE.md
+!*.R
+!.gitignore

@@ -161,9 +161,10 @@ apply_feature_filtering <- function(input_file, motif_ranges, weight_filter, wor
   motif_data <- read.table(input_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
   cat("Loaded", nrow(motif_data), "motif occurrences\n")
   
-  # STEP 1: Add EPM names for seqlet matching
-  cat("\nStep 1: Converting motif names to EPM format...\n")
-  motif_data$epm <- convert_epm_vitis(motif_data$motif)
+  # STEP 1: Use motif_short column for range matching, but remove strand suffix for matching
+  cat("\nStep 1: Creating strand-less EPM names for range matching...\n")
+  motif_data$epm <- gsub("[FR]$", "", motif_data$motif_short)  # Remove strand suffix for range file matching
+  cat("  Example: ", motif_data$motif_short[1], " -> ", motif_data$epm[1], "\n")
   
   # Check how many motifs have matching seqlet data
   tss_epms <- unique(motif_ranges$tss$epm)

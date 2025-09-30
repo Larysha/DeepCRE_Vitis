@@ -13,6 +13,7 @@
 #
 # Adapted for Vitis vinifera project structure with pattern-based file finding
 # and outputs to dedicated mo_go results directory.
+#setwd("/home/rish/phd_2025/deepcre_vitis/vitis_cre/src/moca/mo_go")
 ######################
 
 library(tidyr)
@@ -25,7 +26,7 @@ args <- commandArgs(trailingOnly = TRUE)
 
 # Find input files by pattern
 # Motif occurrence data (filtered)
-motif_pattern <- "../../../out/moca_results/mo_proj/*_vitis_ssr_q10q90_filtered.csv"
+motif_pattern <- "../../../out/moca_results/mo_proj/filtering/*_vitis_ssr_q10q90_filtered.csv"
 motif_files <- Sys.glob(motif_pattern)
 default_motif_file <- if (length(motif_files) > 0) sort(motif_files, decreasing = TRUE)[1] else motif_pattern
 
@@ -67,14 +68,9 @@ cat("  Expression file:", EXPR_FILE, "\n")
 cat("  Output directory:", OUTPUT_DIR, "\n")
 cat("  Date:", DATE_STAMP, "\n\n")
 
-#' Standardize gene IDs (following original logic)
-standardize_gene_ids <- function(gene_ids) {
-  standardized <- tolower(gene_ids)
-  standardized <- gsub("[-']+", "", standardized)
-  standardized <- gsub("\\..*", "", standardized)
-  standardized <- gsub("[-']+", "", standardized)
-  standardized <- gsub("_.*", "", standardized)
-  return(standardized)
+#' Use gene IDs as-is (no standardization needed - already handled by 00_convert_gene_ids.R)
+use_original_gene_ids <- function(gene_ids) {
+  return(gene_ids)
 }
 
 #' Load GO annotations from GMT file
@@ -86,7 +82,10 @@ load_go_annotations <- function(gmt_file) {
   }
 
   gmt_lines <- readLines(gmt_file)
-  go_data <- data.frame()
+
+  # Pre-allocate list for efficiency
+  go_list <- list()
+  counter <- 1
 
   for (line in gmt_lines) {
     parts <- strsplit(line, "\t")[[1]]
@@ -95,21 +94,26 @@ load_go_annotations <- function(gmt_file) {
       description <- parts[2]
       genes <- parts[3:length(parts)]
 
-      for (gene in genes) {
-        if (nzchar(gene)) {
-          go_data <- rbind(go_data, data.frame(
-            gene_id = gene,
-            category_name = category_name,
-            description = description,
-            stringsAsFactors = FALSE
-          ))
-        }
+      # Filter non-empty genes
+      valid_genes <- genes[nzchar(genes)]
+
+      if (length(valid_genes) > 0) {
+        go_list[[counter]] <- data.frame(
+          gene_id = valid_genes,
+          category_name = category_name,
+          description = description,
+          stringsAsFactors = FALSE
+        )
+        counter <- counter + 1
       }
     }
   }
 
-  # Standardize gene IDs
-  go_data$gene_id_std <- standardize_gene_ids(go_data$gene_id)
+  # Combine all at once instead of repeated rbind
+  go_data <- do.call(rbind, go_list)
+
+  # Keep gene IDs as-is (already standardized by 00_convert_gene_ids.R)
+  go_data$gene_id_std <- use_original_gene_ids(go_data$gene_id)
 
   cat("  Loaded", nrow(go_data), "gene-category associations\n")
   return(go_data)
@@ -124,7 +128,7 @@ load_motif_data <- function(motif_file) {
   }
 
   motif_data <- read.csv(motif_file, stringsAsFactors = FALSE)
-  motif_data$gene_id_std <- standardize_gene_ids(motif_data$gene_id)
+  motif_data$gene_id_std <- use_original_gene_ids(motif_data$gene_id)
 
   # Extract motif information
   if (!"epm" %in% colnames(motif_data)) {
@@ -145,7 +149,16 @@ load_predictions <- function(pred_file) {
   }
 
   pred_data <- read.csv(pred_file, stringsAsFactors = FALSE)
-  pred_data$gene_id_std <- standardize_gene_ids(pred_data$gene_id)
+
+  # Handle different column naming conventions
+  if ("genes" %in% colnames(pred_data) && !"gene_id" %in% colnames(pred_data)) {
+    pred_data$gene_id <- pred_data$genes
+  }
+  if ("pred_probs" %in% colnames(pred_data) && !"prob" %in% colnames(pred_data)) {
+    pred_data$prob <- pred_data$pred_probs
+  }
+
+  pred_data$gene_id_std <- use_original_gene_ids(pred_data$gene_id)
 
   # Create probability classes
   pred_data$prob_class <- ifelse(pred_data$prob > 0.5, "high", "low")
@@ -163,11 +176,17 @@ load_expression_data <- function(expr_file) {
   }
 
   expr_data <- read.csv(expr_file, stringsAsFactors = FALSE)
-  expr_data$gene_id_std <- standardize_gene_ids(expr_data$gene_id)
+  expr_data$gene_id_std <- use_original_gene_ids(expr_data$gene_id)
 
   # Create expression classes
   if ("target_class" %in% colnames(expr_data)) {
     expr_data$expr_class <- ifelse(expr_data$target_class == 1, "high", "low")
+  } else if ("target" %in% colnames(expr_data)) {
+    # Handle target column - assuming 1 = high expression, 0 = low expression, 2 = medium (exclude)
+    expr_data$expr_class <- ifelse(expr_data$target == 1, "high",
+                                   ifelse(expr_data$target == 0, "low", NA))
+    # Remove medium expression genes (target == 2) as they weren't used in training
+    expr_data <- expr_data[!is.na(expr_data$expr_class), ]
   } else if ("tpm" %in% colnames(expr_data)) {
     median_expr <- median(expr_data$tpm, na.rm = TRUE)
     expr_data$expr_class <- ifelse(expr_data$tpm >= median_expr, "high", "low")
@@ -204,10 +223,20 @@ create_gene_motif_mapping <- function(motif_data, pred_data, expr_data, go_data)
   base_mapping <- base_mapping %>%
     left_join(pred_data %>% select(gene_id_std, prob, prob_class), by = "gene_id_std")
 
-  # Step 4: Add GO functional annotations
+  # Step 4: Add GO functional annotations (preserve all categories per gene)
+  go_summary <- go_data %>%
+    group_by(gene_id_std) %>%
+    summarise(
+      go_category_count = n(),
+      go_categories = paste(unique(category_name), collapse = ";"),
+      go_descriptions = paste(unique(description), collapse = ";"),
+      primary_category = first(category_name),
+      primary_description = first(description),
+      .groups = "drop"
+    )
+
   base_mapping <- base_mapping %>%
-    left_join(go_data %>% select(gene_id_std, category_name, description),
-              by = "gene_id_std")
+    left_join(go_summary, by = "gene_id_std")
 
   # Step 5: Add motif information (genes may have multiple motifs)
   # Create a summary of motifs per gene
@@ -230,7 +259,7 @@ create_gene_motif_mapping <- function(motif_data, pred_data, expr_data, go_data)
     mutate(
       has_expression = !is.na(expr_class),
       has_prediction = !is.na(prob),
-      has_go_annotation = !is.na(category_name),
+      has_go_annotation = !is.na(primary_category),
       has_motifs = !is.na(total_motifs),
 
       # Classification of genes
@@ -264,21 +293,45 @@ analyze_motif_function_associations <- function(gene_mapping, motif_data, go_dat
   cat("Analyzing motif-function associations...\n")
 
   # Create detailed motif-GO associations (each motif occurrence)
+  # Select available columns dynamically
+  available_cols <- c("gene_id_std", "epm", "category_name", "description")
+  optional_cols <- c("motif_region", "score")
+
+  # Add optional columns if they exist
+  for (col in optional_cols) {
+    if (col %in% colnames(motif_data) || col %in% colnames(go_data)) {
+      available_cols <- c(available_cols, col)
+    }
+  }
+
   motif_go_detailed <- motif_data %>%
     left_join(go_data, by = "gene_id_std") %>%
     filter(!is.na(category_name)) %>%
-    select(gene_id_std, epm, category_name, description, motif_region, score)
+    select(all_of(available_cols))
 
   # Summarize associations by motif and GO category
-  motif_go_summary <- motif_go_detailed %>%
+  summary_base <- motif_go_detailed %>%
     group_by(epm, category_name, description) %>%
     summarise(
       gene_count = length(unique(gene_id_std)),
       total_occurrences = n(),
-      mean_score = mean(score, na.rm = TRUE),
       .groups = "drop"
-    ) %>%
-    arrange(desc(gene_count))
+    )
+
+  # Add mean score if score column exists
+  if ("score" %in% colnames(motif_go_detailed)) {
+    motif_go_summary <- summary_base %>%
+      left_join(
+        motif_go_detailed %>%
+          group_by(epm, category_name, description) %>%
+          summarise(mean_score = mean(score, na.rm = TRUE), .groups = "drop"),
+        by = c("epm", "category_name", "description")
+      )
+  } else {
+    motif_go_summary <- summary_base
+  }
+
+  motif_go_summary <- motif_go_summary %>% arrange(desc(gene_count))
 
   # Analyze motif enrichment in GO categories
   # Calculate background frequencies
@@ -370,11 +423,11 @@ create_functional_gene_sets <- function(gene_mapping, associations) {
   # High-confidence gene sets (multiple lines of evidence)
   high_confidence_sets <- gene_mapping %>%
     filter(data_completeness == "complete") %>%
-    group_by(category_name, has_p0m_motif, has_p1m_motif) %>%
+    group_by(primary_category, has_p0m_motif, has_p1m_motif) %>%
     summarise(
       gene_set = paste(unique(gene_id_std), collapse = ","),
       gene_count = length(unique(gene_id_std)),
-      description = first(description),
+      description = first(primary_description),
       .groups = "drop"
     ) %>%
     filter(gene_count >= 3)

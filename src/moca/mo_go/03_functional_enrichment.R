@@ -22,7 +22,7 @@ args <- commandArgs(trailingOnly = TRUE)
 
 # Find input files by pattern - use existing performance analysis outputs
 # Integrated data from motif enrichment analysis (contains motifs + performance)
-integrated_pattern <- "../../../out/moca_results/mo_proj/*_vitis_motif_enrichment_integrated_data.csv"
+integrated_pattern <- "../../../out/moca_results/mo_proj/enrichment/*_vitis_motif_enrichment_integrated_data.csv"
 integrated_files <- Sys.glob(integrated_pattern)
 default_integrated_file <- if (length(integrated_files) > 0) sort(integrated_files, decreasing = TRUE)[1] else integrated_pattern
 
@@ -32,7 +32,7 @@ perf_files <- Sys.glob(perf_pattern)
 default_perf_file <- if (length(perf_files) > 0) sort(perf_files, decreasing = TRUE)[1] else perf_pattern
 
 # GO annotation file (MapMan format)
-default_go_file <- "../../../vitis_data/gene_ontology/V_vinifera_ont_converted.gmt"
+default_go_file <- "../../../../vitis_cre/vitis_data/gene_ontology/V_vinifera_ont_converted.gmt"
 
 # Output directory
 default_output_dir <- "../../../out/moca_results/mo_go"
@@ -66,7 +66,7 @@ cat("  Date:", DATE_STAMP, "\n\n")
 #' Reads MapMan-style GMT file and creates gene-to-function mapping
 #' following the original gene ID standardization logic
 #'
-#' @param gmt_file Path to GMT format GO file
+#' @param gmt_file Path to GMT format GO file (importantly-reformatted to match Vitis IDs)
 #' @return Data frame with gene_id and functional annotations
 load_go_annotations <- function(gmt_file) {
 
@@ -110,23 +110,6 @@ load_go_annotations <- function(gmt_file) {
   return(go_data)
 }
 
-#' Standardize gene IDs following original logic
-#'
-#' Applies the same gene ID cleaning as the original scripts
-#'
-#' @param gene_ids Character vector of gene IDs
-#' @return Standardized gene IDs
-standardize_gene_ids <- function(gene_ids) {
-
-  # Following original logic exactly:
-  standardized <- tolower(gene_ids)
-  standardized <- gsub("[-']+", "", standardized)     # Remove hyphens and apostrophes
-  standardized <- gsub("\\..*", "", standardized)     # Remove everything after first dot
-  standardized <- gsub("[-']+", "", standardized)     # Remove hyphens again
-  standardized <- gsub("_.*", "", standardized)       # Remove everything after first underscore
-
-  return(standardized)
-}
 
 #' Load and prepare motif occurrence data
 #'
@@ -144,7 +127,7 @@ load_motif_data <- function(motif_file) {
   cat("  Loaded", nrow(motif_data), "motif occurrences\n")
 
   # Standardize gene IDs
-  motif_data$gene_id_std <- standardize_gene_ids(motif_data$gene_id)
+  motif_data$gene_id_std <- motif_data$gene_id  # No standardization needed
 
   # Extract EPM format (following original naming)
   # Assuming epm column exists, otherwise derive from motif column
@@ -174,7 +157,7 @@ load_predictions <- function(pred_file) {
   cat("  Loaded", nrow(pred_data), "predictions\n")
 
   # Standardize gene IDs
-  pred_data$gene_id_std <- standardize_gene_ids(pred_data$gene_id)
+  pred_data$gene_id_std <- pred_data$gene_id  # No standardization needed
 
   # Create probability classes (following original logic)
   pred_data$prob_class <- ifelse(pred_data$prob > 0.5, "high", "low")
@@ -201,7 +184,7 @@ load_expression_data <- function(expr_file) {
   cat("  Loaded", nrow(expr_data), "expression measurements\n")
 
   # Standardize gene IDs
-  expr_data$gene_id_std <- standardize_gene_ids(expr_data$gene_id)
+  expr_data$gene_id_std <- expr_data$gene_id  # No standardization needed
 
   # Create expression classes (assuming target_class column exists)
   if ("target_class" %in% colnames(expr_data)) {
@@ -234,7 +217,7 @@ integrate_datasets <- function(motif_data, pred_data, expr_data, go_data) {
   cat("Integrating datasets...\n")
 
   # Standardize GO gene IDs
-  go_data$gene_id_std <- standardize_gene_ids(go_data$gene_id)
+  go_data$gene_id_std <- go_data$gene_id  # No standardization needed
 
   # Step 1: Merge motif data with predictions (following original logic)
   merged_step1 <- merge(motif_data, pred_data,
@@ -256,22 +239,8 @@ integrate_datasets <- function(motif_data, pred_data, expr_data, go_data) {
                           all = FALSE, ignore.case = TRUE)
   cat("  After GO annotation merge:", nrow(integrated_data), "rows\n")
 
-  # Calculate prediction performance (following original logic)
-  integrated_data$pred_perf <- ifelse(
-    integrated_data$expr_class == integrated_data$prob_class,
-    "TRUE", "FALSE"
-  )
-
-  # Calculate EPM-specific prediction performance
-  integrated_data$epm_pred_perf <- ifelse(
-    integrated_data$pred_perf == FALSE, "NA",
-    ifelse(
-      grepl("p0m", integrated_data$epm) & integrated_data$expr_class == "high", "TRUE_high",
-      ifelse(
-        grepl("p1m", integrated_data$epm) & integrated_data$expr_class == "low", "TRUE_low", "NA"
-      )
-    )
-  )
+  # Performance metrics are already calculated in the pre-processed data from mo_proj
+  # No need to recalculate pred_perf and epm_pred_perf as they already exist
 
   cat("  Final integrated dataset:", nrow(integrated_data), "rows\n")
   cat("  Unique genes:", length(unique(integrated_data$gene_id_std)), "\n")
@@ -291,17 +260,22 @@ analyze_motif_go_performance <- function(integrated_data) {
 
   cat("Analyzing motif-GO performance relationships...\n")
 
+  # Memory check before analysis
+  cat("  Input data size:", nrow(integrated_data), "rows,", ncol(integrated_data), "columns\n")
+
+# Note: Data has been pre-filtered for manageable analysis size
+
   # Create contingency tables (following original script exactly)
 
   # 1. Motif vs Expression Class
-  contingency_expr_class <- table(integrated_data$epm, integrated_data$expr_class)
+  contingency_expr_class <- table(integrated_data$epm, integrated_data$expr_binary)
 
   # 2. Motif vs Probability Class
-  contingency_prob_class <- table(integrated_data$epm, integrated_data$prob_class)
+  contingency_prob_class <- table(integrated_data$epm, integrated_data$pred_binary)
 
   # 3. Motif vs EPM Prediction Performance (key analysis)
   epm_perf_data <- subset(integrated_data, epm_pred_perf != "NA")
-  contingency_epm_pred_perf <- table(emp_perf_data$epm, epm_perf_data$epm_pred_perf)
+  contingency_epm_pred_perf <- table(epm_perf_data$epm, epm_perf_data$epm_pred_perf)
 
   # 4. Motif vs GO Categories (the main GO analysis)
   contingency_motif_go <- table(integrated_data$epm, integrated_data$category_name)
@@ -329,7 +303,7 @@ analyze_motif_go_performance <- function(integrated_data) {
 
   # Merge performance tables
   performance_summary <- merge(expr_table,
-                              merge(prob_table, emp_perf_table, by = "epm", all = TRUE),
+                              merge(prob_table, epm_perf_table, by = "epm", all = TRUE),
                               by = "epm", all = TRUE)
 
   # Calculate True Positive metrics (following original logic)
@@ -354,7 +328,7 @@ analyze_motif_go_performance <- function(integrated_data) {
     contingency_tables = list(
       expr_class = contingency_expr_class,
       prob_class = contingency_prob_class,
-      epm_perf = contingency_emp_pred_perf,
+      emp_perf = contingency_epm_pred_perf,
       motif_go = contingency_motif_go
     ),
     integrated_data = integrated_data
@@ -395,32 +369,94 @@ load_existing_analysis_results <- function(integrated_file, perf_file) {
 # Main execution
 cat("Starting GO-based functional enrichment analysis pipeline...\n")
 
+# Memory optimization: Enable garbage collection and set options
+gc()
+options(warn = 1)  # Show warnings immediately
+
 # Load existing analysis results
 existing_results <- load_existing_analysis_results(INTEGRATED_FILE, PERF_FILE)
 integrated_data <- existing_results$integrated_data
 performance_metrics <- existing_results$performance_metrics
+
+# Memory optimization: Garbage collection without sampling (full dataset analysis)
+gc()
 
 # Load GO annotations
 go_annotations <- load_go_annotations(GO_FILE)
 
 # Integrate with GO annotations (add functional categories to existing data)
 cat("Integrating existing results with GO annotations...\n")
-go_annotations$gene_id_std <- standardize_gene_ids(go_annotations$gene_id)
+go_annotations$gene_id_std <- go_annotations$gene_id  # No standardization needed
 
 # Merge integrated data with GO annotations
 if ("gene_id" %in% colnames(integrated_data)) {
-  integrated_data$gene_id_std <- standardize_gene_ids(integrated_data$gene_id)
+  integrated_data$gene_id_std <- integrated_data$gene_id  # No standardization needed
 } else if ("gene_id_std" %in% colnames(integrated_data)) {
   # Already standardized
 } else {
   stop("Cannot find gene ID column in integrated data")
 }
 
+# Memory-safe merge with size checking
+cat("  Attempting GO integration...\n")
+cat("  Integrated data size:", nrow(integrated_data), "rows\n")
+cat("  GO annotations size:", nrow(go_annotations), "rows\n")
+
+# Check for reasonable merge size before proceeding
+common_genes <- intersect(integrated_data$gene_id_std, go_annotations$gene_id_std)
+cat("  Common genes for merge:", length(common_genes), "\n")
+
+if (length(common_genes) == 0) {
+  stop("ERROR: No common genes found between integrated data and GO annotations")
+}
+
+# Perform merge with explicit relationship specification
 go_integrated_data <- merge(integrated_data, go_annotations,
-                           by = "gene_id_std", all.x = FALSE)
+                           by = "gene_id_std", all.x = FALSE,
+                           suffixes = c("", "_go"))
+
+# Force garbage collection after merge
+gc()
+
 cat("  After GO integration:", nrow(go_integrated_data), "motif-gene-GO associations\n")
 
-# Perform GO-specific enrichment analysis
+# Apply confidence and size-based filtering before analysis (following original approach)
+cat("Applying confidence-based filtering to reduce dataset size...\n")
+
+# 1. Probability confidence filtering (from original mo_check_mapping-performance script)
+# Original tested prob > 0.8 and prob > 0.01 - use moderate confidence threshold
+initial_size <- nrow(go_integrated_data)
+go_integrated_data <- go_integrated_data %>%
+  filter(abs(pred_probs - 0.5) >= 0.1)  # Only confident predictions (pred_probs <= 0.4 or pred_probs >= 0.6)
+
+cat("  After probability confidence filtering:", nrow(go_integrated_data), "associations (removed",
+    initial_size - nrow(go_integrated_data), "uncertain predictions)\n")
+
+# 2. Motif frequency filtering (only analyze motifs with sufficient representation)
+motif_frequencies <- go_integrated_data %>%
+  group_by(epm) %>%
+  summarise(n_genes = n_distinct(gene_id_std), .groups = "drop") %>%
+  filter(n_genes >= 10)  # Only motifs appearing in ≥10 genes
+
+go_integrated_data <- go_integrated_data %>%
+  filter(epm %in% motif_frequencies$epm)
+
+cat("  After motif frequency filtering:", nrow(go_integrated_data), "associations\n")
+cat("  Retained motifs:", nrow(motif_frequencies), "out of",
+    length(unique(integrated_data$epm)), "\n")
+
+# Final dataset summary
+cat("\nFiltered dataset summary:\n")
+cat("  Total associations:", nrow(go_integrated_data), "\n")
+cat("  Unique genes:", length(unique(go_integrated_data$gene_id_std)), "\n")
+cat("  Unique motifs:", length(unique(go_integrated_data$epm)), "\n")
+cat("  Unique GO categories:", length(unique(go_integrated_data$category_name)), "(all retained)\n")
+cat("  Data reduction:", sprintf("%.1f%%", 100 * (1 - nrow(go_integrated_data)/initial_size)), "\n")
+
+# Force garbage collection after filtering
+gc()
+
+# Perform GO-specific enrichment analysis on filtered data
 analysis_results <- analyze_motif_go_performance(go_integrated_data)
 
 # Generate outputs

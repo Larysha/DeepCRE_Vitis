@@ -23,13 +23,13 @@ library(stringr)
 args <- commandArgs(trailingOnly = TRUE)
 
 # Find input files by pattern
-# Use outputs from the mapping performance analysis if available
-perf_pattern <- "../../../out/moca_results/mo_go/*_vitis_go_motif_performance_integrated_data.csv"
+# Use outputs from the gene mapper analysis if available (more likely to exist)
+perf_pattern <- "../../../out/moca_results/mo_go/*_vitis_gene_motif_mapper_gene_mapping.csv"
 perf_files <- Sys.glob(perf_pattern)
 default_perf_file <- if (length(perf_files) > 0) sort(perf_files, decreasing = TRUE)[1] else perf_pattern
 
 # Alternatively, rebuild from raw data
-motif_pattern <- "../../../out/moca_results/mo_proj/*_vitis_ssr_q10q90_filtered.csv"
+motif_pattern <- "../../../out/moca_results/mo_proj/filtering/*_vitis_ssr_q10q90_filtered.csv"
 motif_files <- Sys.glob(motif_pattern)
 default_motif_file <- if (length(motif_files) > 0) sort(motif_files, decreasing = TRUE)[1] else motif_pattern
 
@@ -67,19 +67,7 @@ cat("  Expression file:", EXPR_FILE, "\n")
 cat("  Output directory:", OUTPUT_DIR, "\n")
 cat("  Date:", DATE_STAMP, "\n\n")
 
-# Source the helper functions from the mapping performance script
-source_check_mapping_functions <- function() {
-  # Load the functions from our companion script
-  mapping_script <- file.path(dirname(rstudioapi::getSourceEditorContext()$path),
-                              "mo_check_mapping_performance_vitis.R")
-
-  if (file.exists(mapping_script)) {
-    source(mapping_script)
-  } else {
-    # Fallback: define essential functions locally
-    warning("Could not source mapping performance functions, using local definitions")
-  }
-}
+# No external helper functions needed - all functionality is self-contained
 
 #' Load integrated dataset or build from components
 #'
@@ -95,27 +83,127 @@ load_predictability_data <- function(perf_file, motif_file, pred_file, go_file, 
 
   # Try to load pre-computed integrated data first
   if (file.exists(perf_file)) {
-    cat("  Using pre-computed integrated dataset...\n")
+    cat("  Using pre-computed dataset from gene mapper...\n")
     integrated_data <- read.csv(perf_file, stringsAsFactors = FALSE)
-    cat("  Loaded", nrow(integrated_data), "integrated records\n")
+    cat("  Loaded", nrow(integrated_data), "records\n")
+
+    # The gene mapping file doesn't have motif data (epm), so we need to add it
+    # But we can use this file for genes that have both GO and expression/prediction data
+
+    # Check if we need to add motif data
+    if (!"epm" %in% colnames(integrated_data)) {
+      cat("  Gene mapping file missing motif data, need to add motifs from motif file...\n")
+
+      # Try to find and load motif data
+      if (file.exists(motif_file) && !grepl("\\*", motif_file)) {
+        cat("  Loading motif data to merge...\n")
+
+        # Source gene mapper functions to load motif data
+        gene_mapper_script <- "01_mo_gene_mapper_vitis.R"
+        if (file.exists(gene_mapper_script)) {
+          source(gene_mapper_script, local = TRUE)
+          motif_data <- load_motif_data(motif_file)
+
+          # Add motif data to the gene mapping (genes can have multiple motifs)
+          integrated_data <- integrated_data %>%
+            inner_join(motif_data %>% select(gene_id_std, epm),
+                      by = "gene_id_std", relationship = "many-to-many")
+
+          cat("  Added motif data, now have", nrow(integrated_data), "records\n")
+        } else {
+          stop("Cannot find gene mapper script to load motif data")
+        }
+      } else {
+        stop("Cannot find motif file: ", motif_file)
+      }
+    }
+
+    # Rename columns for compatibility if needed
+    if ("primary_category" %in% colnames(integrated_data)) {
+      integrated_data$category_name <- integrated_data$primary_category
+    }
+    if ("primary_description" %in% colnames(integrated_data)) {
+      integrated_data$description <- integrated_data$primary_description
+    }
+
+    # Add prediction performance columns using existing data
+    cat("  Adding prediction performance metrics...\n")
+    integrated_data <- integrated_data %>%
+      mutate(
+        # Overall prediction performance
+        pred_perf = case_when(
+          (expr_class == "high" & prob_class == "high") |
+          (expr_class == "low" & prob_class == "low") ~ "TRUE",
+          TRUE ~ "FALSE"
+        ),
+
+        # EPM-specific prediction performance
+        epm_pred_perf = case_when(
+          grepl("p0m", epm) & expr_class == "high" & prob_class == "high" ~ "TRUE_high",
+          grepl("p1m", epm) & expr_class == "low" & prob_class == "low" ~ "TRUE_low",
+          TRUE ~ "FALSE"
+        )
+      )
+
     return(integrated_data)
   }
 
-  # Otherwise, build from scratch (following original logic)
+  # Build from scratch using gene mapper script functions
   cat("  Building integrated dataset from components...\n")
 
-  # Load components (requires functions from mapping performance script)
-  if (exists("load_go_annotations")) {
-    go_data <- load_go_annotations(go_file)
-    motif_data <- load_motif_data(motif_file)
-    pred_data <- load_predictions(pred_file)
-    expr_data <- load_expression_data(expr_file)
-
-    integrated_data <- integrate_datasets(motif_data, pred_data, expr_data, go_data)
-    return(integrated_data)
+  # Source the gene mapper script which has all the functions we need
+  gene_mapper_script <- "01_mo_gene_mapper_vitis.R"
+  if (file.exists(gene_mapper_script)) {
+    cat("  Sourcing functions from:", gene_mapper_script, "\n")
+    source(gene_mapper_script, local = TRUE)
   } else {
-    stop("Cannot build integrated dataset - helper functions not available")
+    stop("Cannot find gene mapper script: ", gene_mapper_script)
   }
+
+  # Load the raw data using functions from gene mapper
+  go_data <- load_go_annotations(go_file)
+  motif_data <- load_motif_data(motif_file)
+  pred_data <- load_predictions(pred_file)
+  expr_data <- load_expression_data(expr_file)
+
+  # Create integrated dataset by joining all data
+  cat("  Integrating datasets...\n")
+
+  # Start with motif data (this has the epm column we need)
+  integrated_data <- motif_data %>%
+    # Add GO annotations
+    left_join(go_data %>% select(gene_id_std, category_name, description),
+              by = "gene_id_std", relationship = "many-to-many") %>%
+    # Add predictions
+    left_join(pred_data %>% select(gene_id_std, prob, prob_class),
+              by = "gene_id_std") %>%
+    # Add expression data
+    left_join(expr_data %>% select(gene_id_std, expr_class),
+              by = "gene_id_std") %>%
+    # Only keep records with all required data
+    filter(!is.na(category_name), !is.na(prob), !is.na(expr_class))
+
+  # Add prediction performance columns
+  cat("  Adding prediction performance metrics...\n")
+  integrated_data <- integrated_data %>%
+    mutate(
+      # Overall prediction performance
+      pred_perf = case_when(
+        (expr_class == "high" & prob_class == "high") |
+        (expr_class == "low" & prob_class == "low") ~ "TRUE",
+        TRUE ~ "FALSE"
+      ),
+
+      # EPM-specific prediction performance
+      epm_pred_perf = case_when(
+        grepl("p0m", epm) & expr_class == "high" & prob_class == "high" ~ "TRUE_high",
+        grepl("p1m", epm) & expr_class == "low" & prob_class == "low" ~ "TRUE_low",
+        TRUE ~ "FALSE"
+      )
+    )
+
+  cat("  Integrated dataset created with", nrow(integrated_data), "records\n")
+  return(integrated_data)
 }
 
 #' Calculate motif predictability metrics within GO categories
@@ -134,7 +222,7 @@ calculate_go_predictability <- function(integrated_data) {
   # Group by motif and GO category
   predictability_results <- integrated_data %>%
     group_by(epm, category_name) %>%
-    summarise(
+    reframe(
       # Basic counts
       total_genes = n(),
 
@@ -149,12 +237,12 @@ calculate_go_predictability <- function(integrated_data) {
       # EPM-specific performance (following original logic)
       epm_correct_high = sum(epm_pred_perf == "TRUE_high", na.rm = TRUE),
       epm_correct_low = sum(epm_pred_perf == "TRUE_low", na.rm = TRUE),
-      epm_total_correct = epm_correct_high + emp_correct_low,
+      epm_total_correct = epm_correct_high + epm_correct_low,
 
       # Calculate True Positive Rate for expected class
       tpr_expected = case_when(
-        grepl("p0m", epm) ~ epm_correct_high / high_expr_genes,
-        grepl("p1m", epm) ~ emp_correct_low / low_expr_genes,
+        grepl("p0m", epm) ~ epm_correct_high / pmax(high_expr_genes, 1),
+        grepl("p1m", epm) ~ epm_correct_low / pmax(low_expr_genes, 1),
         TRUE ~ NA_real_
       ),
 
@@ -166,7 +254,10 @@ calculate_go_predictability <- function(integrated_data) {
 
       .groups = "drop"
     ) %>%
-    filter(total_genes >= 5)  # Only analyze categories with sufficient data
+    # Filter for manageable analysis size and meaningful results
+    filter(total_genes >= 10, total_genes <= 1000) %>%  # Focus on reasonable sample sizes
+    # Keep only top combinations by gene count for efficiency
+    slice_max(order_by = total_genes, n = 10000, with_ties = FALSE)
 
   cat("  Analyzed", nrow(predictability_results), "motif-GO combinations\n")
   cat("  Minimum genes per combination:", min(predictability_results$total_genes), "\n")
@@ -187,24 +278,24 @@ analyze_go_performance_patterns <- function(predictability_results, integrated_d
   # Calculate baseline performance for each motif across all categories
   baseline_performance <- integrated_data %>%
     group_by(epm) %>%
-    summarise(
-      baseline_accuracy = sum(pred_perf == "TRUE") / n(),
+    reframe(
+      baseline_accuracy = sum(pred_perf == "TRUE", na.rm = TRUE) / n(),
       baseline_tpr_expected = case_when(
-        grepl("p0m", epm) ~ sum(epm_pred_perf == "TRUE_high", na.rm = TRUE) / sum(expr_class == "high"),
-        grepl("p1m", epm) ~ sum(epm_pred_perf == "TRUE_low", na.rm = TRUE) / sum(expr_class == "low"),
+        grepl("p0m", epm) ~ sum(epm_pred_perf == "TRUE_high", na.rm = TRUE) / pmax(sum(expr_class == "high"), 1),
+        grepl("p1m", epm) ~ sum(epm_pred_perf == "TRUE_low", na.rm = TRUE) / pmax(sum(expr_class == "low"), 1),
         TRUE ~ NA_real_
       ),
       total_genes_baseline = n(),
       .groups = "drop"
     )
 
-  # Compare GO-specific performance to baseline
+  # Compare GO-specific performance to baseline (use inner join to control size)
   performance_comparison <- predictability_results %>%
-    left_join(baseline_performance, by = "epm") %>%
+    inner_join(baseline_performance, by = "epm", relationship = "many-to-many") %>%
     mutate(
-      # Performance relative to baseline
-      accuracy_fold_change = prediction_accuracy / baseline_accuracy,
-      tpr_fold_change = tpr_expected / baseline_tpr_expected,
+      # Performance relative to baseline (prevent division by zero)
+      accuracy_fold_change = prediction_accuracy / pmax(baseline_accuracy, 0.001),
+      tpr_fold_change = tpr_expected / pmax(baseline_tpr_expected, 0.001, na.rm = TRUE),
 
       # Classification of performance change
       performance_change = case_when(
@@ -294,6 +385,8 @@ generate_predictability_summaries <- function(performance_analysis) {
 
 # Main execution
 cat("Starting motif predictability within GO categories analysis...\n")
+
+# All functions are self-contained in this script
 
 # Load or build integrated dataset
 integrated_data <- load_predictability_data(PERF_FILE, MOTIF_FILE, PRED_FILE, GO_FILE, EXPR_FILE)

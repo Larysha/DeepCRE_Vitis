@@ -4,6 +4,7 @@
 # Output: V_vinifera_ont_converted.gmt (Motif format: Vitvi05_01chr08g02097)
 # Optimized GO Gene ID Conversion - uses hash table for faster lookups
 # Processes full dataset efficiently by building lookup tables
+# this script only needs to be run once per go file / genome annotation 
 ######################
 
 library(stringr)

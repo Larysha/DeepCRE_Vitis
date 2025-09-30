@@ -12,6 +12,122 @@ library(magrittr)
 # Source utility functions
 source("../utils.R")
 
+#' Load motif clustering data for dual naming system
+#'
+#' Uses existing clustering output instead of FASTA extraction
+#' @param clustering_file Path to clustering motif summary CSV
+#' @return Data frame with motif naming mappings
+load_motif_clustering_data <- function(clustering_file) {
+  cat("Loading motif clustering data from:", clustering_file, "\n")
+
+  if (!file.exists(clustering_file)) {
+    stop("Clustering file not found: ", clustering_file)
+  }
+
+  clustering_data <- read.csv(clustering_file, stringsAsFactors = FALSE)
+  cat("  Loaded", nrow(clustering_data), "motif clusters\n")
+
+  return(clustering_data)
+}
+
+#' Create motif name mapping from clustering data
+#'
+#' Converts between BLAMM format, long format (with sequences), and short format (for stats)
+#' @param clustering_data Clustering data from mo_clu output
+#' @return Data frame with name mappings
+create_motif_name_mapping_from_clustering <- function(clustering_data) {
+  cat("Creating motif name mappings from clustering data...\n")
+
+  mapping_data <- clustering_data %>%
+    mutate(
+      # Extract existing long format name with sequence
+      long_name = name,  # e.g., "epm_vitis_ssr_0_0_F_4163_13.9_SGCCGCAGCGSCSS"
+
+      # Extract the consensus sequence
+      motif_sequence = consensus,
+
+      # Create basic name (remove score and sequence suffix)
+      # Use full IUPAC DNA alphabet: ATGCNKRYWSMDHBV
+      basic_name = gsub("_[0-9.]+_[ATGCNKRYWSMDHBV]+$", "", name),
+
+      # Create short format name for statistical analysis (memory-efficient)
+      short_name = {
+        # Use vectorized string operations instead of sapply for better memory efficiency
+        # Extract pattern number (4th element after splitting by _)
+        pattern_nums <- as.numeric(sub("^epm_vitis_ssr_([0-9]+)_.*", "\\1", basic_name))
+        # Extract metacluster (5th element)
+        metaclusters <- as.numeric(sub("^epm_vitis_ssr_[0-9]+_([0-9]+)_.*", "\\1", basic_name))
+        # Extract strand (6th element)
+        strands <- sub("^epm_vitis_ssr_[0-9]+_[0-9]+_([FR])_.*", "\\1", basic_name)
+
+        # Create p0m/p1m format vectorized
+        sprintf("epm_vitis_ssr_p%dm%02d%s", metaclusters, pattern_nums, strands)
+      },
+
+      # Extract components from the name for reference (vectorized)
+      pattern_num = as.numeric(sub("^epm_vitis_ssr_([0-9]+)_.*", "\\1", basic_name)),
+      metacluster = as.numeric(sub("^epm_vitis_ssr_[0-9]+_([0-9]+)_.*", "\\1", basic_name)),
+      strand_char = sub("^epm_vitis_ssr_[0-9]+_[0-9]+_([FR])_.*", "\\1", basic_name),
+      count = as.numeric(sub("^epm_vitis_ssr_[0-9]+_[0-9]+_[FR]_([0-9]+)$", "\\1", basic_name))
+    ) %>%
+    select(long_name, short_name, basic_name, motif_sequence, pattern_num, metacluster,
+           strand_char, count, consensus, strand, icscore, nsites, everything())
+
+  cat("  Created", nrow(mapping_data), "name mappings\n")
+  cat("  Example mapping:\n")
+  cat("    Long:", mapping_data$long_name[1], "\n")
+  cat("    Short:", mapping_data$short_name[1], "\n")
+
+  return(mapping_data)
+}
+
+#' Convert BLAMM format motif names to long/short format using clustering data
+#'
+#' @param blamm_motif_names Vector of BLAMM format motif names
+#' @param name_mapping Data frame from create_motif_name_mapping_from_clustering
+#' @return Data frame with converted names
+convert_blamm_to_dual_format <- function(blamm_motif_names, name_mapping) {
+  cat("Converting", length(blamm_motif_names), "BLAMM motif names to dual format...\n")
+
+  # BLAMM format: epm_vitis_ssr_pattern_metacluster_strand_count
+  # Clustering basic_name: epm_vitis_ssr_pattern_metacluster_strand_count (same format!)
+  # Need to match BLAMM names directly against basic_name in clustering data
+
+  conversion_results <- data.frame(
+    blamm_name = blamm_motif_names,
+    stringsAsFactors = FALSE
+  )
+
+  # BLAMM names should match basic_name directly (both are same format)
+  # But let's also try removing trailing numbers in case BLAMM has extra suffixes
+  conversion_results$clean_blamm_name <- blamm_motif_names
+
+  # Match with clustering data using exact match first
+  conversion_results <- conversion_results %>%
+    left_join(name_mapping %>% select(basic_name, long_name, short_name, motif_sequence),
+              by = c("clean_blamm_name" = "basic_name")) %>%
+    mutate(
+      # Use short format for downstream statistical analysis
+      epm = ifelse(is.na(short_name), blamm_name, short_name),
+      # Preserve long format for full information
+      long_format = ifelse(is.na(long_name), blamm_name, long_name)
+    )
+
+  # Report conversion success
+  successful_conversions <- sum(!is.na(conversion_results$short_name))
+  cat("  Successfully converted", successful_conversions, "out of", nrow(conversion_results), "motif names\n")
+
+  if (successful_conversions < nrow(conversion_results)) {
+    failed_names <- conversion_results$blamm_name[is.na(conversion_results$short_name)]
+    cat("  Failed to convert:", length(failed_names), "names\\n")
+    cat("  Example failed BLAMM name:", failed_names[1], "\\n")
+    cat("  Example clustering basic_name:", name_mapping$basic_name[1], "\\n")
+    cat("  Using original names as fallback\\n")
+  }
+
+  return(conversion_results)
+}
+
 # Command line arguments with defaults
 args <- commandArgs(trailingOnly = TRUE)
 
@@ -19,6 +135,7 @@ args <- commandArgs(trailingOnly = TRUE)
 default_blamm_dir <- "../../../out/moca_results/mo_proj/genomic_vitis_vinifera_PN40024_1000bp_pt0.0001"
 default_output_dir <- "../../../out/moca_results/mo_proj/filtering/"
 default_output_file <- "filtered_genomic_occurrences.txt"
+default_clustering_file <- "../../../out/moca_results/mo_clu/20250918_vitis_ssr_cwm_clustering_motif_summary.csv"
 
 # Parse arguments
 INPUT_TYPE <- if (length(args) >= 1 && nzchar(args[1])) args[1] else "single"  # "chunks" or "single"
@@ -26,7 +143,8 @@ INPUT_PATH <- if (length(args) >= 2 && nzchar(args[2])) args[2] else default_bla
 OUTPUT_DIR <- if (length(args) >= 3 && nzchar(args[3])) args[3] else default_output_dir
 OUTPUT_FILE <- if (length(args) >= 4 && nzchar(args[4])) args[4] else default_output_file
 ANNOTATION_FILE <- if (length(args) >= 5 && nzchar(args[5])) args[5] else "../../../vitis_data/gene_models/vitis_vinifera_PN40024.gff3"
-FLANK_SIZE <- if (length(args) >= 6 && nzchar(args[6])) as.numeric(args[6]) else 1000
+CLUSTERING_FILE <- if (length(args) >= 6 && nzchar(args[6])) args[6] else default_clustering_file
+FLANK_SIZE <- if (length(args) >= 7 && nzchar(args[7])) as.numeric(args[7]) else 1000
 
 # Create output directory if it doesn't exist
 if (!dir.exists(OUTPUT_DIR)) {
@@ -42,8 +160,10 @@ cat("  Input type:", INPUT_TYPE, "\n")
 cat("  Input path:", INPUT_PATH, "\n")
 cat("  Output file:", output_path, "\n")
 cat("  Annotation file:", ANNOTATION_FILE, "\n")
+cat("  Clustering file:", CLUSTERING_FILE, "\n")
 cat("  Flank size:", FLANK_SIZE, "bp\n")
-cat("  Filtering: 1000bp upstream + 500bp 5'UTR + 500bp 3'UTR + 1000bp downstream (matches model training)\n\n")
+cat("  Filtering: 1000bp upstream + 500bp 5'UTR + 500bp 3'UTR + 1000bp downstream (matches model training)\n")
+cat("  Dual naming: Using clustering data for long/short format conversion\n\n")
 
 #' Load gene annotation data for coordinate conversion
 #' 
@@ -113,9 +233,10 @@ load_gene_annotations <- function(annotation_file) {
 #' @param file_paths Character vector of file paths to process
 #' @param output_file Character path for output file
 #' @param gene_annotations Data frame with gene coordinate information
+#' @param motif_name_mapping Data frame with motif name conversions from clustering
 #' @param flank_size Numeric size of flanking regions extracted
 #' @return Invisible TRUE on success
-filter_genomic_occurrences <- function(file_paths, output_file, gene_annotations, flank_size) {
+filter_genomic_occurrences <- function(file_paths, output_file, gene_annotations, motif_name_mapping, flank_size) {
   
   # Initialize counters
   combined_df <- data.frame()
@@ -232,7 +353,40 @@ filter_genomic_occurrences <- function(file_paths, output_file, gene_annotations
           "(", region_summary$percentage[i], "%)\n")
     }
   }
-  
+
+  # Apply dual naming system conversion using clustering data
+  cat("\n=== DUAL NAMING CONVERSION ===\n")
+  if (nrow(combined_df) > 0) {
+    cat("Converting motif names to dual format (long/short)...\n")
+
+    # Get unique motif names from filtered data
+    unique_motifs <- unique(combined_df$motif)
+    cat("  Found", length(unique_motifs), "unique motif names to convert\n")
+
+    # Convert BLAMM format to dual format using clustering data
+    motif_conversions <- convert_blamm_to_dual_format(unique_motifs, motif_name_mapping)
+
+    # Add converted names to the filtered data
+    combined_df <- combined_df %>%
+      left_join(motif_conversions %>% select(blamm_name, epm, long_format, motif_sequence),
+                by = c("motif" = "blamm_name")) %>%
+      mutate(
+        # Use converted names, fallback to original if conversion failed
+        motif_short = ifelse(is.na(epm), motif, epm),
+        motif_long = ifelse(is.na(long_format), motif, long_format),
+        # Keep original for reference
+        motif_original = motif,
+        # Use short format as primary motif identifier for downstream analysis
+        motif = motif_short
+      )
+
+    cat("  Successfully applied dual naming system\n")
+    cat("  Example conversion:\n")
+    cat("    Original:", combined_df$motif_original[1], "\n")
+    cat("    Short:", combined_df$motif_short[1], "\n")
+    cat("    Long:", combined_df$motif_long[1], "\n")
+  }
+
   # Write results to output file
   cat("\nWriting results to:", output_file, "\n")
   write.table(combined_df, output_file, sep = "\t", row.names = FALSE, quote = FALSE)
@@ -242,10 +396,14 @@ filter_genomic_occurrences <- function(file_paths, output_file, gene_annotations
 }
 
 # Main execution logic
-cat("Starting BLAMM genomic occurrence filtering...\n")
+cat("Starting BLAMM genomic occurrence filtering with dual naming system...\n")
 
 # Load gene annotations
 gene_annotations <- load_gene_annotations(ANNOTATION_FILE)
+
+# Load motif clustering data for dual naming system
+clustering_data <- load_motif_clustering_data(CLUSTERING_FILE)
+motif_name_mapping <- create_motif_name_mapping_from_clustering(clustering_data)
 
 if (INPUT_TYPE == "chunks") {
   # Process chunked files from directory
@@ -293,8 +451,8 @@ if (INPUT_TYPE == "chunks") {
   stop("Invalid INPUT_TYPE: ", INPUT_TYPE, ". Must be 'chunks' or 'single'")
 }
 
-# Execute filtering
-filter_genomic_occurrences(file_paths, output_path, gene_annotations, FLANK_SIZE)
+# Execute filtering with dual naming conversion
+filter_genomic_occurrences(file_paths, output_path, gene_annotations, motif_name_mapping, FLANK_SIZE)
 
 # Print session info for reproducibility
 cat("\nSession Information:\n")

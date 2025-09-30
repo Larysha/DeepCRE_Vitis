@@ -30,6 +30,120 @@ library(stringr)
 # Source utility functions
 source("../utils.R")
 
+# Convert BLAMM format motif names to expected p0m/p1m format
+convert_epm_vitis <- function(code) {
+  # Convert BLAMM format to seqlet statistics format
+  # BLAMM: "epm_vitis_ssr_5_0_R_534" (pattern_metacluster_strand_count)
+  # Target: "epm_vitis_ssr_p0m05" (p{metacluster}m{pattern_padded})
+
+  # Split by underscore to get components
+  parts <- strsplit(code, "_")
+
+  converted <- sapply(parts, function(p) {
+    if (length(p) >= 6) {
+      # Extract pattern number (4th element) and metacluster (5th element)
+      pattern_num <- as.numeric(p[4])
+      metacluster <- as.numeric(p[5])
+
+      # Format as p{metacluster}m{pattern_padded} to match seqlet statistics
+      formatted_pattern <- sprintf("p%dm%02d", metacluster, pattern_num)
+
+      # Reconstruct: epm_vitis_ssr_p{metacluster}m{pattern}
+      paste("epm_vitis_ssr", formatted_pattern, sep = "_")
+    } else {
+      # Fallback for unexpected formats
+      code
+    }
+  })
+
+  return(converted)
+}
+
+# Enhanced dual naming system using existing clustering data
+
+#' Load motif clustering data to get long format names with sequences
+#' @param clustering_file Path to clustering motif summary CSV file
+#' @return Data frame with motif name mappings
+load_motif_clustering_data <- function(clustering_file) {
+
+  cat("Loading motif clustering data for dual naming system...\n")
+
+  if (!file.exists(clustering_file)) {
+    # Try to find the most recent clustering file
+    clustering_pattern <- "../../../out/moca_results/mo_clu/*_vitis_ssr_cwm_clustering_motif_summary.csv"
+    clustering_files <- Sys.glob(clustering_pattern)
+
+    if (length(clustering_files) > 0) {
+      clustering_file <- sort(clustering_files, decreasing = TRUE)[1]
+      cat("  Using found clustering file:", clustering_file, "\n")
+    } else {
+      cat("  Warning: No clustering file found - using basic naming only\n")
+      return(NULL)
+    }
+  }
+
+  # Load clustering data
+  clustering_data <- read.csv(clustering_file, stringsAsFactors = FALSE)
+  cat("  Loaded", nrow(clustering_data), "clustered motifs with sequences\n")
+
+  # The clustering file has:
+  # name: "epm_vitis_ssr_0_0_F_4163_13.9_SGCCGCAGCGSCSS" (long format)
+  # consensus: "SGCCGCAGCGSCSS" (sequence)
+
+  return(clustering_data)
+}
+
+#' Create motif name mapping table from clustering data
+#' @param clustering_data Clustering data from load_motif_clustering_data
+#' @return Data frame with basic_name, long_name, short_name, sequence mappings
+create_motif_name_mapping_from_clustering <- function(clustering_data) {
+
+  if (is.null(clustering_data)) {
+    return(NULL)
+  }
+
+  # Extract components from long format names
+  mapping_data <- clustering_data %>%
+    mutate(
+      long_name = name,
+      sequence = consensus,
+
+      # Extract basic BLAMM name components (remove sequence and score from long name)
+      # epm_vitis_ssr_0_0_F_4163_13.9_SGCCGCAGCGSCSS -> epm_vitis_ssr_0_0_F_4163
+      basic_name = gsub("_[0-9.]+_[ATGCNKRYWSM]+$", "", name),
+
+      # Create short format for statistical analysis (p0m/p1m format with strand)
+      short_name = {
+        # Parse pattern_metacluster_strand from basic name
+        parts_list <- strsplit(basic_name, "_")
+
+        sapply(parts_list, function(parts) {
+          if (length(parts) >= 6) {
+            pattern_num <- as.numeric(parts[4])
+            metacluster <- as.numeric(parts[5])
+            strand <- parts[6]
+
+            # Create p0m/p1m format with strand preserved
+            formatted_pattern <- sprintf("p%dm%02d%s", metacluster, pattern_num, strand)
+            paste("epm_vitis_ssr", formatted_pattern, sep = "_")
+          } else {
+            # Fallback to basic name
+            basic_name[1]  # Use the first element as fallback
+          }
+        })
+      }
+    ) %>%
+    select(basic_name, long_name, short_name, sequence, icscore, nsites)
+
+  cat("  Created mapping for", nrow(mapping_data), "motifs\n")
+  cat("  Sample mappings:\n")
+  cat("    Basic: ", mapping_data$basic_name[1], "\n")
+  cat("    Long:  ", mapping_data$long_name[1], "\n")
+  cat("    Short: ", mapping_data$short_name[1], "\n")
+
+  return(mapping_data)
+}
+
 # Command line arguments with defaults
 args <- commandArgs(trailingOnly = TRUE)
 
@@ -46,11 +160,17 @@ default_prediction_file <- if (length(pred_files) > 0) sort(pred_files, decreasi
 default_expression_file <- "../../../vitis_data/tpm_counts/vitis_drought_leaf_targets.csv"
 default_output_dir <- "../../../out/moca_results/mo_proj/enrichment"
 
+# Clustering file for dual naming system (contains sequences already)
+clustering_pattern <- "../../../out/moca_results/mo_clu/*_vitis_ssr_cwm_clustering_motif_summary.csv"
+clustering_files <- Sys.glob(clustering_pattern)
+default_clustering_file <- if (length(clustering_files) > 0) sort(clustering_files, decreasing = TRUE)[1] else clustering_pattern
+
 # Parse arguments (if not default)
 MOTIF_FILE <- if (length(args) >= 1 && nzchar(args[1])) args[1] else default_motif_file
 PREDICTION_FILE <- if (length(args) >= 2 && nzchar(args[2])) args[2] else default_prediction_file
 EXPRESSION_FILE <- if (length(args) >= 3 && nzchar(args[3])) args[3] else default_expression_file
 OUTPUT_DIR <- if (length(args) >= 4 && nzchar(args[4])) args[4] else default_output_dir
+CLUSTERING_FILE <- if (length(args) >= 5 && nzchar(args[5])) args[5] else default_clustering_file
 
 # Analysis parameters
 DATE_STAMP <- format(Sys.Date(), "%Y%m%d")
@@ -66,10 +186,12 @@ cat("Motif Enrichment Analysis Parameters:\n")
 cat("  Motif file:", MOTIF_FILE, "\n")
 cat("  Prediction file:", PREDICTION_FILE, "\n")
 cat("  Expression file:", EXPRESSION_FILE, "\n")
+cat("  Clustering file:", CLUSTERING_FILE, "\n")
 cat("  Output directory:", OUTPUT_DIR, "\n")
 cat("  Project:", PROJECT_NAME, "\n")
 cat("  Date:", DATE_STAMP, "\n")
-cat("  Analysis scope: ALL GENES (following original moca_blue approach)\n\n")
+cat("  Analysis scope: ALL GENES (following original moca_blue approach)\n")
+cat("  Naming system: DUAL (long format with sequence + short format for stats)\n\n")
 
 #' Load and validate input datasets for enrichment analysis
 #'
@@ -80,8 +202,9 @@ cat("  Analysis scope: ALL GENES (following original moca_blue approach)\n\n")
 #' @param motif_file Path to filtered motif occurrences CSV
 #' @param prediction_file Path to model prediction results CSV
 #' @param expression_file Path to expression target data CSV
+#' @param clustering_file Path to motif clustering summary CSV (contains sequences)
 #' @return List containing loaded and processed datasets
-load_enrichment_data <- function(motif_file, prediction_file, expression_file) {
+load_enrichment_data <- function(motif_file, prediction_file, expression_file, clustering_file = NULL) {
 
   cat("Loading enrichment analysis datasets (ALL GENES approach)...\n")
 
@@ -93,6 +216,47 @@ load_enrichment_data <- function(motif_file, prediction_file, expression_file) {
   }
   motif_data <- read.csv(motif_file, stringsAsFactors = FALSE)
   cat("  Loaded", nrow(motif_data), "motif occurrences\n")
+
+  # DUAL NAMING SYSTEM: Use existing clustering data with sequences
+  if (!is.null(clustering_file)) {
+    cat("  Creating dual naming system from clustering data...\n")
+
+    # Load clustering data and create mapping
+    clustering_data <- load_motif_clustering_data(clustering_file)
+    motif_mapping <- create_motif_name_mapping_from_clustering(clustering_data)
+
+    if (!is.null(motif_mapping)) {
+      # Join motif data with clustering mapping
+      motif_data <- motif_data %>%
+        left_join(motif_mapping, by = c("motif" = "basic_name")) %>%
+        mutate(
+          # Fill in missing values for motifs not in clustering
+          long_name = ifelse(is.na(long_name), motif, long_name),
+          short_name = ifelse(is.na(short_name), motif, short_name),
+          sequence = ifelse(is.na(sequence), "NOT_CLUSTERED", sequence),
+          basic_name = motif
+        )
+
+      cat("  Dual naming applied to", nrow(motif_data), "motif occurrences\n")
+      cat("  Sample mappings:\n")
+      cat("    Basic: ", motif_data$basic_name[1], "\n")
+      cat("    Long:  ", motif_data$long_name[1], "\n")
+      cat("    Short: ", motif_data$short_name[1], "\n")
+    } else {
+      cat("  No clustering mapping created - using basic naming\n")
+      motif_data$long_name <- motif_data$motif
+      motif_data$short_name <- motif_data$motif
+      motif_data$basic_name <- motif_data$motif
+      motif_data$sequence <- "NOT_AVAILABLE"
+    }
+
+  } else {
+    cat("  No clustering file provided - using basic naming only\n")
+    motif_data$long_name <- motif_data$motif
+    motif_data$short_name <- motif_data$motif
+    motif_data$basic_name <- motif_data$motif
+    motif_data$sequence <- "NOT_AVAILABLE"
+  }
 
   # STEP 2: Load model predictions (all available predictions)
   # Expects prediction file to always be available
@@ -192,12 +356,20 @@ integrate_enrichment_data <- function(data_list) {
       pred_binary = ifelse(pred_probs <= 0.5, "low", "high"),
 
       # Extract metacluster from motif names - THIS IS KEY FOR BIOLOGICAL LOGIC
-      # p0m motifs = expect high expression association
-      # p1m motifs = expect low expression association
-      metacluster = ifelse(grepl("_1_", motif), "p1m", "p0m"),
+      # For short format: epm_vitis_ssr_p0m05F or epm_vitis_ssr_p1m05F
+      # For BLAMM format: epm_vitis_ssr_pattern_metacluster_strand_count
+      # metacluster 0 = expect high expression association (p0m)
+      # metacluster 1 = expect low expression association (p1m)
+      metacluster = ifelse(grepl("p1m|_1_", motif), "p1m", "p0m"),
 
-      # Use full motif names as EPM identifiers for individual motif analysis
-      epm = motif
+      # NAMING SYSTEM: Use clustering-derived short_name if available, otherwise keep original
+      epm = if ("short_name" %in% colnames(.)) {
+        ifelse(is.na(short_name) | short_name == motif,
+               motif,  # Keep original BLAMM name as fallback
+               short_name)  # Use clustering-derived short name (p0m/p1m format)
+      } else {
+        motif  # Keep original BLAMM names
+      }
     )
 
   integrated_data <- integrated_data %>%
@@ -209,13 +381,13 @@ integrate_enrichment_data <- function(data_list) {
 
       # STEP 11: Calculate metacluster-specific prediction performance
       # This checks if motifs behave according to their biological hypothesis:
-      # p0m motifs should be in high-expression genes
-      # p1m motifs should be in low-expression genes
+      # Check motif behavior based on metacluster assignment
+      # Use metacluster column (derived from original names) rather than epm pattern matching
       epm_pred_perf = case_when(
-        pred_correct == "FALSE" ~ "NA",                               # Model wrong overall
-        grepl("p0m", epm) & expr_binary == "high" ~ "TRUE_high",      # p0m in high expr (expected)
-        grepl("p1m", epm) & expr_binary == "low" ~ "TRUE_low",        # p1m in low expr (expected)
-        TRUE ~ "NA"                                                   # Other combinations
+        pred_correct == "FALSE" ~ "NA",                                # Model wrong overall
+        metacluster == "p0m" & expr_binary == "high" ~ "TRUE_high",   # p0m motifs in high expr (expected)
+        metacluster == "p1m" & expr_binary == "low" ~ "TRUE_low",     # p1m motifs in low expr (expected)
+        TRUE ~ "NA"                                                    # Other combinations
       ),
 
       # Simplified metacluster correctness for statistical analysis
@@ -279,7 +451,8 @@ calculate_motif_enrichment <- function(integrated_data) {
     left_join(correct_df, by = "epm") %>%
     mutate(
       # Add metacluster information (convert string to numeric for consistency)
-      metacluster = ifelse(grepl("_1_", epm), 1, 0),
+      # Detect p1m in short format or _1_ in BLAMM format
+      metacluster = ifelse(grepl("p1m|_1_", epm), 1, 0),
 
       # Calculate total occurrences
       total_occurrences = expr_high + expr_low,
@@ -388,7 +561,7 @@ calculate_motif_enrichment <- function(integrated_data) {
 cat("Starting motif enrichment analysis pipeline...\n")
 
 # Load all datasets (no validation filtering)
-data_list <- load_enrichment_data(MOTIF_FILE, PREDICTION_FILE, EXPRESSION_FILE)
+data_list <- load_enrichment_data(MOTIF_FILE, PREDICTION_FILE, EXPRESSION_FILE, CLUSTERING_FILE)
 
 # Integrate data for analysis
 integrated_data <- integrate_enrichment_data(data_list)
@@ -446,7 +619,8 @@ write.csv(enrichment_metrics, paste0(output_base, "_results.csv"), row.names = F
 cat("\nOutput files generated:\n")
 cat("  Enrichment results:", basename(paste0(output_base, "_results.csv")), "\n")
 
-# Integrated dataset CSV
+# Integrated dataset CSV (includes dual naming system)
+# Contains: long_name (with sequence), epm (short format for stats), basic_name, motif_sequence
 write.csv(integrated_data, paste0(output_base, "_integrated_data.csv"), row.names = FALSE)
 cat("  Integrated data:", basename(paste0(output_base, "_integrated_data.csv")), "\n")
 

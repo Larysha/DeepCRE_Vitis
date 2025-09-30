@@ -1,7 +1,9 @@
 # Ignore large data repositories (inputs and outputs)
 vitis_data/
 out/
+src/tomtom/
 jupyter_sandbox/
+.claude/
 
 # specific input files
 src/deepcre/inputs/

@@ -19,9 +19,9 @@ cat("Current working directory:", current_dir, "\n")
 
 # Locate output directory for mo_range results
 if (basename(current_dir) == "mo_range") {
-  # Running from mo_range directory
-  input_dir <- "."
-  output_dir <- "."
+  # Running from mo_range directory - look in the actual output directory
+  input_dir <- "../../../out/moca_results/mo_range"
+  output_dir <- "../../../out/moca_results/mo_range"
 } else if (file.exists("../out/moca_results/mo_range")) {
   # Running from src directory
   input_dir <- "../out/moca_results/mo_range"
@@ -140,6 +140,7 @@ create_tss_plot <- function(data) {
       axis.text = element_text(size = 9)
     ) +
     scale_x_continuous(breaks = seq(0, tss_threshold, 300)) +
+    scale_y_continuous(breaks = seq(0, 1500, 500), limits = c(0, 1700)) +
     coord_cartesian(xlim = c(0, tss_threshold))
 
   # Region annotations removed to avoid overlap with bars
@@ -219,6 +220,7 @@ create_tts_plot <- function(data) {
       axis.text = element_text(size = 9)
     ) +
     scale_x_continuous(breaks = seq(0, 1500, 300)) +
+    scale_y_continuous(breaks = seq(0, 1500, 500), limits = c(0, 1700)) +
     coord_cartesian(xlim = c(0, 1500))
 
   # Region annotations removed to avoid overlap with bars
