@@ -20,8 +20,21 @@
 # 3. Count motif occurrences per gene per genotype
 # 4. Classify motifs as "conserved" (present in all genotypes) or "mutated" (variable)
 # 5. Statistical comparison of conservation patterns between DE and UE genes
-# 6. Bootstrap resampling for robust statistical inference
+# 6. Bootstrap resampling for robust statistical inference (100 genes, 1000 iterations)
 # 7. Visualization of results
+#
+# STATISTICAL TESTS (from paper):
+# - Fisher's exact test for gene set intersections
+# - Chi-squared test for conservation rate differences
+# - Bootstrap resampling to handle gene set size imbalances
+# - Significance threshold: p <0.0001
+#
+# KEY NUMBERS FROM PAPER (Solanum analysis):
+# - 15 genotypes analyzed
+# - 314 genes with structural variants + differential expression
+# - 27,993 genes with homogeneous expression
+# - 2,053 genes with differential expression
+# - Bootstrap: 100 genes per sample, 1000 iterations
 #
 # REFERENCE:
 # Methods adapted from: https://www.nature.com/articles/s41467-024-47744-0
@@ -214,9 +227,15 @@ gene_annot_unif_expr_locID <- load_gene_annotations(UE_FILE, "uniformly expresse
 #
 # DESCRIPTION:
 # Load motif occurrences from multi-genotype BLAMM mapping
-# Apply quality filters:
+# Apply quality filters based on paper methodology:
 # - Must be within 1500bp of gene start/end (promoter/terminator regions)
 # - Motif length must be >= word_size (default 14bp)
+# - IMPORTANT: Should be filtered to EPM preferred positional ranges
+#
+# BLAMM PARAMETERS (from paper):
+# - e-value <0.0001 for motif mapping
+# - word_size: 14bp (matches original)
+# - EPMs must be in their "preferred positional range" (from TF-MoDISco importance scores)
 #
 # DATA STRUCTURE:
 # loc | source | motif | mstart | mend | score | strand | gene_start | gene_end | ...
@@ -226,6 +245,10 @@ gene_annot_unif_expr_locID <- load_gene_annotations(UE_FILE, "uniformly expresse
 # - motif: EPM identifier (e.g., epm_vitis_ssr_p0m02F)
 # - mstart/mend: Motif position within gene region
 # - gene_start/gene_end: Gene boundaries
+# - preferred_range: EPM-specific positional preference (from mo_range analysis)
+#
+# NOTE: The paper's analysis specifically examines EPMs within their preferred ranges
+# (e.g., -500 to -100 relative to TSS). Motifs outside preferred ranges were excluded.
 #
 ######################################################################################
 
@@ -260,6 +283,15 @@ load_motif_occurrences <- function(motif_file, word_size = 14) {
   ]
 
   cat("  After proximity filter:", nrow(motif_filtered), "occurrences\n")
+
+  # TODO: Add FILTER for EPM preferred positional ranges
+  # This info should come from mo_range outputs (get_seql_per_pattern.R, motif_ranges_meta.R)
+  # Each EPM has a preferred position range relative to TSS/TTS
+  # Example: epmVitis-M006-p0m02 prefers -500 to -100 relative to TSS
+  # Paper's analysis specifically examined motifs within these preferred ranges
+  # Motifs outside preferred ranges were excluded from the analysis
+  cat("  NOTE: Additional filtering for EPM preferred ranges should be applied\n")
+  cat("        (Load preferred ranges from mo_range pipeline outputs)\n")
 
   # FILTER 2: Minimum motif length
   # Calculate motif length and filter

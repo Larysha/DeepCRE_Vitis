@@ -6,27 +6,41 @@ Analyze motif conservation/mutation patterns across genotypes to explain express
 ## Key Question
 **Do regulatory differences explain why the same gene is expressed differently in different varieties?**
 
+## Critical Insight from Paper
+**This is NOT a traditional differential expression analysis.**
+
+The paper uses **CNN model predictions** to classify genes, not direct RNA-seq data:
+1. Train DeepCRE models on multiple varieties
+2. Generate CNN probability predictions (0-1 scale) for each gene
+3. Calculate **variance in predictions** across varieties
+4. Variance **>0.005** = differential expression | **≤0.005** = uniform expression
+
+**Why?** This validates that CNN predictions correlate with actual regulatory variation. Genes with predicted differential expression should show enrichment for mutated motifs.
+
 ---
 
 ## Data You Need (Future)
 
-### 1. Expression Data for Multiple Genotypes
+### 1. CNN Prediction Data for Multiple Genotypes (Paper Methodology)
 ```
-gene_id       | genotype   | expression | class | status
-Vitvi01g00010 | PN40024    | 125        | high  | uniform
-Vitvi01g00010 | Cabernet   | 118        | high  | uniform
-Vitvi01g00020 | PN40024    | 5          | low   | differential
-Vitvi01g00020 | Cabernet   | 95         | high  | differential
+gene_id       | genotype   | cnn_prob | class | variance | status
+Vitvi01g00010 | PN40024    | 0.62     | high  | 0.003    | uniform
+Vitvi01g00010 | Cabernet   | 0.58     | high  | 0.003    | uniform
+Vitvi01g00020 | PN40024    | 0.35     | low   | 0.012    | differential
+Vitvi01g00020 | Cabernet   | 0.78     | high  | 0.012    | differential
 ```
 
 **Where this comes from:**
-- Multi-variety RNA-seq experiments
-- In silico perturbation predictions (CNN model output)
-- Cross-variety expression profiling
+- Train DeepCRE MSR models on multiple Vitis varieties
+- Generate CNN probability predictions (0-1 scale) for each gene
+- Calculate variance in predictions across varieties
+- **Key threshold:** variance >0.005 = differential, ≤0.005 = uniform
+
+**Note:** Paper uses CNN predictions, not RNA-seq data directly. This validates that predicted differential expression correlates with regulatory variation.
 
 ### 2. Gene Classifications
-- **DE genes:** Different expression across genotypes
-- **UE genes:** Same expression across genotypes
+- **DE genes:** Variance in CNN predictions >0.005 across genotypes
+- **UE genes:** Variance in CNN predictions ≤0.005 across genotypes
 
 ---
 
@@ -111,15 +125,19 @@ Between the scripts, you need to:
    cat genotype1.fasta genotype2.fasta > merged.fasta
    ```
 
-3. **Run BLAMM**
+3. **Run BLAMM** (with paper parameters)
    ```bash
-   blamm motif_pwms.txt merged.fasta > occurrences.txt
+   blamm -e 0.0001 -w 14 motif_pwms.txt merged.fasta > occurrences.txt
    ```
+   - e-value <0.0001 (paper specification)
+   - word_size 14bp
 
 4. **Filter occurrences**
    ```bash
    Rscript ../mo_proj/filter_blamm_occ_00.R occurrences.txt
    ```
+   - Then filter to EPM preferred positional ranges (from mo_range outputs)
+   - Critical: motifs outside preferred ranges should be excluded
 
 ---
 
@@ -143,6 +161,13 @@ Repeat analysis 1000 times with random sampling
 → Get distribution of results
 → Calculate mean and confidence intervals
 ```
+Paper uses: 100 genes per sample, 1000 iterations
+
+### Statistical Tests (Paper Methodology)
+- **Fisher's exact test** for gene set intersections
+- **Chi-squared test** for conservation rate differences
+- **Significance threshold:** p <0.0001
+- **Example from paper:** 15 genotypes, 314 DE genes, 27,993 UE genes
 
 ---
 
@@ -220,19 +245,19 @@ cat("  TODO: Run when data available\n")
 
 ## Current Status
 
-⚠️ **FRAMEWORK READY - AWAITING DATA**
+**FRAMEWORK READY - AWAITING DATA**
 
 ### What's Complete:
-- ✅ Full analysis logic implemented
-- ✅ All functions defined
-- ✅ Statistical methods ready
-- ✅ Visualization code prepared
-- ✅ Extensive documentation
+- Full analysis logic implemented
+- All functions defined
+- Statistical methods ready
+- Visualization code prepared
+- Extensive documentation
 
 ### What's Needed:
-- ⏳ Multi-genotype expression data
-- ⏳ In silico perturbation predictions
-- ⏳ Or cross-variety RNA-seq results
+- Multi-genotype expression data
+- In silico perturbation predictions
+- Or cross-variety RNA-seq results
 
 ---
 
@@ -269,13 +294,19 @@ cat("  TODO: Run when data available\n")
 
 **Sample size imbalance:**
 - UE sets typically much larger
-- Bootstrap handles this automatically
+- Bootstrap handles this automatically (100 genes, 1000 iterations)
 - But verify sample sizes are appropriate
 
 **Motif length filtering:**
-- Default minimum = 14bp
+- Default minimum = 14bp (paper specification)
 - Adjust WORD_SIZE parameter if needed
 - Check motif length distribution first
+
+**Positional filtering:**
+- **Critical:** Must filter to EPM preferred ranges (from mo_range outputs)
+- Example: epmVitis-M006-p0m02 might prefer -500 to -100 from TSS
+- Paper excluded motifs outside preferred ranges
+- This is essential for accurate results
 
 ---
 

@@ -91,13 +91,23 @@ cat("  Date:", DATE_STAMP, "\n\n")
 # - In silico perturbation predictions from trained models
 # - Cross-variety expression profiling studies
 #
-# EXPECTED DATA FORMAT:
-# gene_id       | genotype    | expression_tpm | expression_class | differential_status
-# Vitvi01g00010 | PN40024     | 125.3          | high            | uniform
-# Vitvi01g00010 | Cabernet    | 118.7          | high            | uniform
-# Vitvi01g00010 | Chardonnay  | 122.1          | high            | uniform
-# Vitvi01g00020 | PN40024     | 5.2            | low             | differential
-# Vitvi01g00020 | Cabernet    | 95.3           | high            | differential
+# EXPECTED DATA FORMAT (based on paper methodology):
+# gene_id       | genotype    | cnn_probability | expression_class | variance_across_genotypes | differential_status
+# Vitvi01g00010 | PN40024     | 0.62            | high            | 0.003                     | uniform
+# Vitvi01g00010 | Cabernet    | 0.58            | high            | 0.003                     | uniform
+# Vitvi01g00010 | Chardonnay  | 0.61            | high            | 0.003                     | uniform
+# Vitvi01g00020 | PN40024     | 0.35            | low             | 0.012                     | differential
+# Vitvi01g00020 | Cabernet    | 0.78            | high            | 0.012                     | differential
+#
+# WHERE:
+# - cnn_probability: MSR model prediction (0-1 scale) from trained DeepCRE models
+# - expression_class: "high" if probability >0.5, "low" if probability ≤0.5
+# - variance_across_genotypes: variance of CNN probabilities across genotypes
+# - differential_status: "differential" if variance >0.005, "uniform" otherwise
+#
+# NOTE: The paper uses CNN model predictions to classify genes, not direct RNA-seq data.
+# This allows validation that predicted differential expression correlates with motif
+# conservation patterns across genotypes.
 #
 ######################
 
@@ -115,13 +125,15 @@ if (file.exists(EXPR_FILE)) {
   expression_data <- data.frame(
     gene_id = character(),
     genotype = character(),
-    expression_tpm = numeric(),
+    cnn_probability = numeric(),
     expression_class = character(),
+    variance_across_genotypes = numeric(),
     differential_status = character(),
     stringsAsFactors = FALSE
   )
 
-  cat("  Expected columns: gene_id, genotype, expression_tpm, expression_class, differential_status\n")
+  cat("  Expected columns: gene_id, genotype, cnn_probability, expression_class,\n")
+  cat("                    variance_across_genotypes, differential_status\n")
 }
 
 ######################
@@ -131,28 +143,31 @@ if (file.exists(EXPR_FILE)) {
 # DESCRIPTION:
 # Identify genes with differential expression across genotypes/varieties
 #
-# CRITERIA FOR DIFFERENTIAL EXPRESSION:
+# CRITERIA FOR DIFFERENTIAL EXPRESSION (based on paper methodology):
+# - Variance in CNN probability predictions across genotypes >0.005
 # - Expression class varies across genotypes (e.g., high in variety A, low in variety B)
-# - Significant expression changes based on statistical tests
-# - Responsive to environmental conditions in genotype-specific manner
+# - Calculated from variance of MSR model predictions, not direct RNA-seq measurements
 #
 # BIOLOGICAL INTERPRETATION:
 # DE genes may harbor genotype-specific regulatory elements
 # Motif differences in these genes could explain expression divergence
+# The paper uses this to validate that CNN predictions correlate with regulatory variation
 #
 ######################
 
 cat("\n=== SECTION 2: Identify Differentially Expressed Genes ===\n")
 
 # PSEUDOCODE for identifying DE genes
+# Based on paper methodology: variance >0.005 in CNN probability predictions
 identify_differential_genes <- function(expr_data) {
-  # Group by gene and check if expression varies across genotypes
+  # Group by gene and calculate variance in CNN predictions across genotypes
   de_genes <- expr_data %>%
     group_by(gene_id) %>%
     summarise(
       n_genotypes = n_distinct(genotype),
+      variance_cnn_prob = var(cnn_probability),
       n_classes = n_distinct(expression_class),
-      is_differential = n_classes > 1,  # Different classes across genotypes
+      is_differential = variance_cnn_prob > 0.005,  # Paper threshold
       .groups = "drop"
     ) %>%
     filter(is_differential == TRUE)
@@ -174,30 +189,33 @@ cat("  TODO: Run when multi-genotype expression data available\n")
 # DESCRIPTION:
 # Identify genes with uniform expression across genotypes/varieties
 #
-# CRITERIA FOR UNIFORM EXPRESSION:
+# CRITERIA FOR UNIFORM EXPRESSION (based on paper methodology):
+# - Variance in CNN probability predictions across genotypes ≤0.005
 # - Same expression class across all genotypes
-# - Stable expression regardless of genetic background
-# - Non-responsive to genotype-specific factors
+# - Stable predicted expression regardless of genetic background
 #
 # BIOLOGICAL INTERPRETATION:
 # UE genes serve as BACKGROUND/CONTROL set
 # Expected to have conserved regulatory elements
 # Used for comparison with DE genes to assess if motif variance
 # is specifically enriched in DE genes
+# Bootstrap resampling (100 genes, 1000 iterations) handles size imbalance
 #
 ######################
 
 cat("\n=== SECTION 3: Identify Uniformly Expressed Genes ===\n")
 
 # PSEUDOCODE for identifying UE genes
+# Based on paper methodology: variance ≤0.005 in CNN probability predictions
 identify_uniform_genes <- function(expr_data) {
-  # Group by gene and check if expression is consistent across genotypes
+  # Group by gene and check variance in CNN predictions
   ue_genes <- expr_data %>%
     group_by(gene_id) %>%
     summarise(
       n_genotypes = n_distinct(genotype),
+      variance_cnn_prob = var(cnn_probability),
       n_classes = n_distinct(expression_class),
-      is_uniform = n_classes == 1,  # Same class across all genotypes
+      is_uniform = variance_cnn_prob <= 0.005,  # Paper threshold
       .groups = "drop"
     ) %>%
     filter(is_uniform == TRUE)
@@ -346,17 +364,31 @@ cat("  PLACEHOLDER: Coordinate file writing logic defined\n")
 ######################
 
 cat("\n=== PREPROCESSING COMPLETE ===\n")
-cat("\nNEXT STEPS (when data available):\n")
-cat("1. Run this script with actual multi-genotype expression data\n")
-cat("2. Extract FASTA sequences using coordinate files:\n")
+cat("\nWORKFLOW OVERVIEW (aligned with paper methodology):\n")
+cat("\nDATA PREPARATION PHASE:\n")
+cat("1. Train DeepCRE MSR models on multiple Vitis varieties\n")
+cat("2. Generate CNN probability predictions for each gene across varieties\n")
+cat("3. Calculate variance in predictions (threshold: >0.005 for differential)\n")
+cat("4. Classify genes as differential (DE) or uniform (UE) expression\n")
+cat("\nMOTIF MAPPING PHASE:\n")
+cat("5. Run this preprocessing script with CNN prediction data\n")
+cat("6. Extract FASTA sequences using coordinate files:\n")
 cat("   bash ../ref_seq/extract_range_to_fasta_genomic.sh <genome> <coord_file>\n")
-cat("3. Merge FASTAs from multiple genotypes into single file\n")
-cat("4. Run BLAMM motif mapping on merged FASTA:\n")
-cat("   blamm <motif_pwms> <merged_fasta> > occurrences.txt\n")
-cat("5. Filter BLAMM occurrences:\n")
+cat("7. Merge FASTAs from multiple genotypes into single file\n")
+cat("8. Run BLAMM motif mapping on merged FASTA:\n")
+cat("   blamm -e 0.0001 -w 14 <motif_pwms> <merged_fasta> > occurrences.txt\n")
+cat("9. Filter BLAMM occurrences:\n")
 cat("   Rscript ../mo_proj/filter_blamm_occ_00.R <occurrences.txt>\n")
-cat("6. Run genotype variance analysis:\n")
-cat("   Rscript genotype_variance_analysis.R\n")
+cat("10. Filter to EPM preferred positional ranges (from mo_range outputs)\n")
+cat("\nANALYSIS PHASE:\n")
+cat("11. Run genotype variance analysis:\n")
+cat("    Rscript 01_genotype_variance_analysis.R\n")
+cat("12. Statistical tests: Fisher's exact, Chi-squared (p <0.0001)\n")
+cat("13. Bootstrap resampling: 100 genes, 1000 iterations\n")
+cat("\nKEY PAPER INSIGHT:\n")
+cat("This validates that CNN predictions correlate with regulatory variation -\n")
+cat("genes with predicted differential expression should show enrichment for\n")
+cat("mutated motifs, while uniformly expressed genes should have conserved motifs.\n")
 
 cat("\nOUTPUT DIRECTORY:", OUTPUT_DIR, "\n")
 cat("Session completed:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")

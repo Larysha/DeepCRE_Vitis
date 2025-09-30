@@ -76,7 +76,7 @@ This module analyzes **motif conservation and mutation patterns across multiple 
 - `*_uniformly_expressed_locations.txt` - UE gene coordinates
 - Gene-location mapping files
 
-**Status:** ⚠️ TEMPLATE - awaiting multi-genotype data
+**Status:** TEMPLATE - awaiting multi-genotype data
 
 ---
 
@@ -105,7 +105,7 @@ This module analyzes **motif conservation and mutation patterns across multiple 
 - `*_conservation_rates.pdf` - Bar plot visualization
 - `*_gene_conservation_boxplot.pdf` - Bootstrap distribution plot
 
-**Status:** ⚠️ TEMPLATE - awaiting input data
+**Status:** TEMPLATE - awaiting input data
 
 ## Key Concepts
 
@@ -125,46 +125,77 @@ This module analyzes **motif conservation and mutation patterns across multiple 
 
 Because UE gene sets are typically much larger than DE sets:
 1. Randomly sample UE genes to match DE set size
-2. Repeat 100-1000 times
+2. Repeat sampling (paper uses 100 genes per sample, 1000 iterations)
 3. Calculate average statistics
 4. Generate confidence intervals
 
 This ensures fair statistical comparison between gene sets of different sizes.
 
+**Paper Statistics:**
+- Fisher's exact test for gene set intersections
+- Chi-squared test for conservation rate differences
+- Significance threshold: p <0.0001
+- Solanum analysis: 15 genotypes, 314 DE genes, 27,993 UE genes
+
 ## Input Data Requirements
 
 ### When Data Available:
 
-**1. Multi-Genotype Expression Data**
+**1. Multi-Genotype CNN Prediction Data** (based on paper methodology)
 ```
-gene_id       | genotype    | expression_tpm | expression_class | differential_status
-Vitvi01g00010 | PN40024     | 125.3          | high            | uniform
-Vitvi01g00010 | Cabernet    | 118.7          | high            | uniform
-Vitvi01g00020 | PN40024     | 5.2            | low             | differential
-Vitvi01g00020 | Cabernet    | 95.3           | high            | differential
+gene_id       | genotype    | cnn_probability | expression_class | variance_across_genotypes | differential_status
+Vitvi01g00010 | PN40024     | 0.62            | high            | 0.003                     | uniform
+Vitvi01g00010 | Cabernet    | 0.58            | high            | 0.003                     | uniform
+Vitvi01g00020 | PN40024     | 0.35            | low             | 0.012                     | differential
+Vitvi01g00020 | Cabernet    | 0.78            | high            | 0.012                     | differential
 ```
 
-**2. Motif Occurrences** (from BLAMM)
+**Key Points:**
+- `cnn_probability`: MSR model predictions (0-1 scale) from trained DeepCRE models
+- `expression_class`: "high" if probability >0.5, "low" if ≤0.5
+- `variance_across_genotypes`: variance of CNN probabilities across genotypes
+- `differential_status`: "differential" if variance >0.005, "uniform" if ≤0.005
+
+**Note:** The paper uses CNN model predictions, not direct RNA-seq data. This validates that predicted differential expression correlates with motif conservation patterns.
+
+**2. Motif Occurrences** (from BLAMM with specific parameters)
+- **BLAMM parameters from paper:** e-value <0.0001, word_size 14bp
 - Must include genotype identifier in location string
 - Format: `genotype_chr:start-end`
 - Filtered to gene proximity regions (±1500bp)
+- **Critical:** EPMs must be within their preferred positional ranges (from TF-MoDISco importance scores)
+  - Each EPM has a preferred position range relative to TSS/TTS
+  - Example: epmVitis-M006-p0m02 might prefer -500 to -100 relative to TSS
+  - Motifs outside preferred ranges should be excluded (as done in paper)
 
 **3. Gene Annotations**
 - GFF3 format
 - With flanking regions (±1000bp)
 
-## Future Data Sources
+## Data Generation Workflow
 
-### In Silico Perturbation (Planned)
-- Train CNN models on variety-specific data
-- Generate in silico perturbed sequences
-- Predict expression for sequences with/without specific motifs
-- Compare predictions across varieties
+### Phase 1: Train Multi-Species/Variety Models
+1. Train DeepCRE MSR models on multiple Vitis varieties
+2. Generate CNN probability predictions for each gene across varieties
+3. Calculate variance in predictions across varieties
+4. Classify genes: variance >0.005 = differential, ≤0.005 = uniform
 
-### Multi-Variety RNA-seq
-- Differential expression across Vitis varieties
-- Drought-tolerant vs sensitive cultivars
-- PN40024, Cabernet Sauvignon, Chardonnay, etc.
+### Phase 2: Characterize EPM Positional Preferences
+1. Run TF-MoDISco on trained models (deepcre_motifs.py)
+2. Extract motifs and analyze positional preferences (mo_range pipeline)
+3. Define preferred position ranges for each EPM relative to TSS/TTS
+4. Use these ranges to filter BLAMM mappings
+
+### Phase 3: Map Motifs Across Genotypes
+1. Extract regulatory sequences for all varieties
+2. Run BLAMM with e-value <0.0001, word_size 14bp
+3. Filter to proximity regions (±1500bp) AND preferred positional ranges
+4. Proceed to variance analysis
+
+**Data Sources:**
+- Multi-variety RNA-seq (PN40024, Cabernet Sauvignon, Chardonnay, etc.)
+- Drought-tolerant vs sensitive cultivar comparisons
+- In silico perturbation predictions from trained models
 
 ## Interpretation Guide
 
@@ -200,8 +231,8 @@ bash ../ref_seq/extract_range_to_fasta_genomic.sh \
 # Step 3: Merge FASTAs
 cat genotype1.fasta genotype2.fasta genotype3.fasta > merged_genotypes.fasta
 
-# Step 4: BLAMM mapping
-blamm path/to/motif_pwms.txt merged_genotypes.fasta > occurrences.txt
+# Step 4: BLAMM mapping (with paper parameters)
+blamm -e 0.0001 -w 14 path/to/motif_pwms.txt merged_genotypes.fasta > occurrences.txt
 
 # Step 5: Filter occurrences
 Rscript ../mo_proj/filter_blamm_occ_00.R occurrences.txt
@@ -216,15 +247,15 @@ Rscript 01_genotype_variance_analysis.R \
 
 ## Current Status
 
-⚠️ **FRAMEWORK COMPLETE - AWAITING DATA**
+**FRAMEWORK COMPLETE - AWAITING DATA**
 
 Both scripts are fully implemented with:
-- ✅ Detailed section-by-section annotations
-- ✅ Complete analysis logic (pseudocode where data unavailable)
-- ✅ Statistical methods defined
-- ✅ Visualization functions ready
-- ✅ Pattern-based file finding
-- ✅ Compatible with existing pipeline structure
+- Detailed section-by-section annotations
+- Complete analysis logic (pseudocode where data unavailable)
+- Statistical methods defined
+- Visualization functions ready
+- Pattern-based file finding
+- Compatible with existing pipeline structure
 
 **Next Steps:**
 1. Obtain/generate multi-genotype expression data
@@ -246,6 +277,27 @@ Both scripts are fully implemented with:
 3. **Related Pipelines:**
    - `mo_proj/` - Single-genome motif analysis
    - `mo_go/` - Functional enrichment analysis
+
+## Complete Integrated Workflow Summary
+
+### Prerequisites (must be completed first):
+1. Train DeepCRE MSR models on multiple Vitis varieties
+2. Run TF-MoDISco to extract EPMs
+3. Characterize EPM positional preferences (mo_range pipeline)
+4. Generate CNN predictions for all genes across all varieties
+
+### mo_var Pipeline Execution:
+5. Calculate variance in CNN predictions → classify genes (DE vs UE)
+6. Run `00_prepare_genotype_gene_lists.R` → generate coordinate files
+7. Extract FASTA sequences for all varieties
+8. Run BLAMM with `-e 0.0001 -w 14`
+9. Filter to proximity regions (±1500bp) AND preferred positional ranges
+10. Run `01_genotype_variance_analysis.R` → statistical comparison
+11. Bootstrap resampling (100 genes, 1000 iterations)
+12. Statistical tests (Fisher's exact, Chi-squared, p <0.0001)
+13. Validate: Do CNN predictions correlate with regulatory variation?
+
+**Key Validation Point:** Genes with high variance in CNN predictions should show enrichment for mutated motifs, demonstrating that the models learned biologically relevant regulatory patterns.
 
 ## Contact
 
