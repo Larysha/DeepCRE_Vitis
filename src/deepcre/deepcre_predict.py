@@ -6,9 +6,9 @@ import pandas as pd
 import numpy as np
 from pyfaidx import Fasta
 
-from vitis_cre.src.deepcre.parsing import ModelCase, ParsedInputs, RunInfo
-from vitis_cre.src.deepcre.utils import get_filename_from_path, get_time_stamp, load_input_files, make_absolute_path, result_summary
-from vitis_cre.src.deepcre.train_models_vitis import extract_genes_prediction, find_newest_model_path
+from parsing import ModelCase, ParsedInputs, RunInfo
+from utils import get_filename_from_path, get_time_stamp, load_input_files, make_absolute_path, result_summary
+from train_models_vitis import extract_genes_prediction, find_newest_model_path
 
 
 def predict_self(extragenic: int, intragenic: int, val_entity: str, output_name: str, model_case: ModelCase,

@@ -20,8 +20,8 @@ from sklearn.utils import shuffle
 import re
 import sys
 
-from vitis_cre.src.deepcre.parsing import ParsedInputs, RunInfo, ModelCase
-from vitis_cre.src.deepcre.utils import get_filename_from_path, get_time_stamp, one_hot_encode, make_absolute_path, result_summary, combine_annotations, combine_fasta, combine_tpms, load_input_files
+from parsing import ParsedInputs, RunInfo, ModelCase
+from utils import get_filename_from_path, get_time_stamp, one_hot_encode, make_absolute_path, result_summary, combine_annotations, combine_fasta, combine_tpms, load_input_files
 
 # Global tracking for consistently excluded genes across all models
 GLOBAL_EXCLUDED_GENES = {

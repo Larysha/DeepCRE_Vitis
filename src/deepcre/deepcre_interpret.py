@@ -10,10 +10,10 @@ import shap
 from pyfaidx import Fasta 
 import re
 
-from vitis_cre.src.deepcre.utils import get_time_stamp, get_filename_from_path, load_input_files, make_absolute_path, load_annotation_msr, result_summary
-from vitis_cre.src.deepcre.deepcre_predict import predict_self
-from vitis_cre.src.deepcre.train_models_vitis import extract_genes_prediction
-from vitis_cre.src.deepcre.parsing import ModelCase, ParsedInputs, RunInfo
+from utils import get_time_stamp, get_filename_from_path, load_input_files, make_absolute_path, load_annotation_msr, result_summary
+from deepcre_predict import predict_self
+from train_models_vitis import extract_genes_prediction
+from parsing import ModelCase, ParsedInputs, RunInfo
 
 
 def find_newest_interpretation_results(output_name: str, results_path: str = "") -> str:

@@ -2,9 +2,8 @@ import argparse
 import os
 import pandas as pd
 import numpy as np
-import os
 
-from vitis_cre.src.deepcre.utils import make_absolute_path
+from utils import make_absolute_path
 
 
 def parse_args() -> argparse.Namespace:

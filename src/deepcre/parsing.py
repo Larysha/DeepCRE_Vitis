@@ -7,7 +7,7 @@ from typing import Any, Dict, Iterable, List, Tuple
 from copy import deepcopy
 import pandas as pd
 
-from vitis_cre.src.deepcre.utils import make_absolute_path, read_feature_from_input_dict
+from utils import make_absolute_path, read_feature_from_input_dict
 
 
 

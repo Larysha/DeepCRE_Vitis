@@ -221,7 +221,7 @@ enhance_motif_metadata <- function(motifs, metadata) {
 #######################################################
 
 compute_similarity_matrix <- function(motifs, method = "SW") {
-  # Compute pairwise similarity matrix using specified method
+  # Compute pairwise similarity matrix using Sandelin-Wassermann method
   # Returns both the similarity matrix and distance matrix for clustering
   
   cat("Computing pairwise similarities using", method, "method...\n")

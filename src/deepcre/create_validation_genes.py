@@ -5,7 +5,7 @@ import pandas as pd
 from Bio import SeqIO
 import re
 import argparse
-from vitis_cre.src.deepcre.utils import make_absolute_path
+from utils import make_absolute_path
 
 
 def parse_args() -> argparse.Namespace:

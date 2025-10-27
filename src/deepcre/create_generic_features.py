@@ -5,8 +5,8 @@ import pandas as pd
 import numpy as np
 from pyfaidx import Fasta
 
-from vitis_cre.src.deepcre.utils import make_absolute_path, load_input_files, get_filename_from_path, get_time_stamp
-from vitis_cre.src.deepcre.parsing import ParsedInputs, RunInfo
+from utils import make_absolute_path, load_input_files, get_filename_from_path, get_time_stamp
+from parsing import ParsedInputs, RunInfo
 
 """
   Usage Examples:

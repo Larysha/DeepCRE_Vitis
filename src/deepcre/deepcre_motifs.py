@@ -8,9 +8,9 @@ import modisco
 from importlib import reload
 import h5py
 
-from vitis_cre.src.deepcre.utils import get_filename_from_path, get_time_stamp, make_absolute_path, result_summary
-from vitis_cre.src.deepcre.deepcre_interpret import extract_scores, find_newest_interpretation_results, get_val_obj_names
-from vitis_cre.src.deepcre.parsing import ModelCase, ParsedInputs, RunInfo
+from utils import get_filename_from_path, get_time_stamp, make_absolute_path, result_summary
+from deepcre_interpret import extract_scores, find_newest_interpretation_results, get_val_obj_names
+from parsing import ModelCase, ParsedInputs, RunInfo
 
 
 def modisco_run(contribution_scores: np.ndarray, hypothetical_scores: np.ndarray, one_hots: np.ndarray, output_name: str):

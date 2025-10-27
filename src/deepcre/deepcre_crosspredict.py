@@ -5,9 +5,9 @@ from tensorflow.keras.models import load_model #type:ignore
 from typing import List, Tuple, Dict, Any, Union
 import argparse
 
-from vitis_cre.src.deepcre.train_models_vitis import extract_genes_prediction
-from vitis_cre.src.deepcre.utils import make_absolute_path, load_input_files, get_filename_from_path, get_time_stamp, result_summary
-from vitis_cre.src.deepcre.parsing import ParsedInputs, RunInfo
+from train_models_vitis import extract_genes_prediction
+from utils import make_absolute_path, load_input_files, get_filename_from_path, get_time_stamp, result_summary
+from parsing import ParsedInputs, RunInfo
 
 
 def load_models(model_names: List[str]) -> Dict[str, Any]:
