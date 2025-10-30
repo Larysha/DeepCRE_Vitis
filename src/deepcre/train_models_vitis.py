@@ -511,6 +511,82 @@ def mask_sequences(train_seqs: np.ndarray, val_seqs: np.ndarray, extragenic: int
     val_seqs[:, extragenic:extragenic + 3, :] = 0
     val_seqs[:, extragenic + (intragenic * 2) + 17:extragenic + (intragenic * 2) + 20, :] = 0
 
+def append_sequence_prediction(tpms: Optional[pd.DataFrame], extracted_seqs: Dict[str, Tuple[List[np.ndarray], List[int], List[str]]],
+                               expected_final_size: int, chrom: str, gene_id: str, sequence_to_append: np.ndarray) -> None:
+    """appends a sequence to the extracted sequences dictionary. If the sequence has the expected size, it will be appended
+
+    Args:
+        tpms (Optional[pd.DataFrame]): DataFrame containing the TPM values for the genes. If None, the gene will be appended with a target of "NA"
+        extracted_seqs (Dict[str, Tuple[List[np.ndarray], List[int], List[str]]]): dictionary containing a tuple for each chromosome. The tuple contains the extracted sequences, the targets and the gene ids
+        expected_final_size (int): the length the extracted sequence should have at the end
+        chrom (str): chromosome on which the gene lies
+        gene_id (str): gene id of the gene
+        sequence_to_append (np.ndarray): one hot encoded sequence to append
+    """
+    if sequence_to_append.shape[0] == expected_final_size:
+        extracted_tuple = extracted_seqs.get(chrom, ())
+        if extracted_tuple == ():
+            x, y, gene_ids = [], [], []
+        else:
+            x = extracted_tuple[0]                      #type:ignore
+            y = extracted_tuple[1]                      #type:ignore
+            gene_ids = extracted_tuple[2]               #type:ignore
+        if tpms is None:
+            y.append("NA")                              #type:ignore
+        else:
+            try:
+                y.append(tpms.loc[gene_id, 'target'])       #type:ignore
+            except KeyError:
+                # if the gene is not in the TPM file, it is not used for predictions
+                return
+        x.append(sequence_to_append)
+        gene_ids.append(gene_id)
+        extracted_seqs[chrom] = (x, y, gene_ids)
+
+def extract_genes_prediction(genome: Fasta, annotation: pd.DataFrame, extragenic: int, intragenic: int, ignore_small_genes: bool, tpms: Optional[pd.DataFrame],
+                             target_chromosomes: Tuple[str, ...]) -> Dict[str, Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """extracts the gene flanking regions for all genes in the annotation file and converts them to one hot encoded numpy arrays
+
+    Args:
+        genome (Fasta): Fasta representation of the genome to extract the gene flanking regions from
+        annotation (pd.DataFrame): DataFrame containing the gene annotations.
+        extragenic (int): number of bases to extract before the start and after the end of the gene
+        intragenic (int): number of bases to extract after the start and before the end of the gene
+        ignore_small_genes (bool): determines how to deal with genes that are smaller than 2x intragenic. If True,
+            these genes will be skipped. If False, central padding will be extended to maintain the expected length.
+        tpms (Optional[pd.DataFrame]): DataFrame containing the target values for the genes. If None, the genes will be appended with a target of "NA"
+        target_chromosomes (Tuple[str, ...]): tuple containing the chromosomes that should be extracted. If empty, all chromosomes will be extracted
+
+    Returns:
+        Dict[str, Tuple[np.ndarray, np.ndarray, np.ndarray]]: dictionary containing the extracted sequences for each chromosome. The tuple contains the extracted sequences, the targets and the gene ids
+    """
+    extracted_seqs = {}
+    expected_final_size = 2 * (extragenic + intragenic) + 20
+    # tpms are absolutely necessary for training, but not for predictions, so can miss if data is for predictions
+    for values in annotation.values:
+        if len(annotation.columns) == 6:
+            specie, chrom, start, end, strand, gene_id = values
+            # use specie in place of chromosome because for msr case genes need to be ordered by species, not chromosome
+        else:
+            chrom, start, end, strand, gene_id = values
+            specie = None
+
+        # skip all chromosomes that are not in the target chromosomes. Empty tuple () means, that all chromosomes should be extracted
+        if target_chromosomes != () and chrom not in target_chromosomes:
+            continue
+
+        seq = extract_gene(genome, extragenic, intragenic, ignore_small_genes, expected_final_size, chrom, start, end, strand)
+        if specie is not None:
+            chrom = specie
+        append_sequence_prediction(tpms=tpms, extracted_seqs=extracted_seqs, expected_final_size=expected_final_size, chrom=chrom, gene_id=gene_id, sequence_to_append=seq)
+
+    # convert lists to arrays
+    for chrom, tuple_ in extracted_seqs.items():
+        x, y, gene_ids = tuple_
+        x, y, gene_ids = np.array(x), np.array(y), np.array(gene_ids)
+        extracted_seqs[chrom] = (x, y, gene_ids)
+    return extracted_seqs
+
 def deep_cre(x_train: np.ndarray, y_train: np.ndarray, x_val: np.ndarray, y_val: np.ndarray, output_name: str,
              model_case: ModelCase, chrom: str, time_stamp: str, test: bool = False) -> Tuple[float, float, float, float]:
     """trains a deep learning model for CRE prediction"""
