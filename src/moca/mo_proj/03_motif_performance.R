@@ -13,10 +13,8 @@
 # 4. Creates dual validation: biological relevance + technical performance
 # 5. Generates comprehensive visualizations and performance reports
 #
-# This script RANKS all motifs by biological enrichment strength
-# Then evaluates model performance on genes containing these ranked motifs
-#
-# PERFORMANCE DEFINITION: Biological relevance (enrichment) + Technical accuracy (predictions)
+# Biological relevance (enrichment) + Technical accuracy (predictions)
+# I.e. bases performance metrics on motif-containing genes
 ######################
 
 library(tidyr)

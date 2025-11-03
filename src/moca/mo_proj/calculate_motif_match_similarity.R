@@ -11,7 +11,7 @@ suppressPackageStartupMessages({
 })
 
 # File paths
-ENRICHMENT_FILE <- "../../../out/moca_results/mo_proj/enrichment/20250930_vitis_motif_enrichment_integrated_data.csv"
+ENRICHMENT_FILE <- "../../../out/moca_results/mo_proj/enrichment/20251103_vitis_motif_enrichment_integrated_data.csv"
 FASTA_FILE <- "../../../out/moca_results/ref_seq/genomic_coords_vitis_vinifera_PN40024_1000bp_flanks.fa"
 OUTPUT_FILE <- "../../../out/moca_results/mo_proj/enrichment/motif_match_similarity_analysis.csv"
 SUMMARY_FILE <- "../../../out/moca_results/mo_proj/enrichment/motif_match_similarity_summary.csv"

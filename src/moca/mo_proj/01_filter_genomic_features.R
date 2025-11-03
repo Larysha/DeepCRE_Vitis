@@ -38,7 +38,7 @@ TTS_RANGES <- if (length(args) >= 4 && nzchar(args[4])) args[4] else default_tts
 ANNOTATION_FILE <- if (length(args) >= 5 && nzchar(args[5])) args[5] else default_annotation_file
 
 # Filtering parameters
-WEIGHT_REGION_FILTER <- TRUE  # Apply 20% minimum representation threshold (AND logic)
+WEIGHT_REGION_FILTER <- TRUE  # Apply 20% minimum representation threshold (OR logic)
 WORD_SIZE_FILTER <- 14       # Minimum motif length in bp
 DATE_STAMP <- format(Sys.Date(), "%Y%m%d")
 
@@ -61,42 +61,6 @@ cat("  Weight region filter:", WEIGHT_REGION_FILTER, "\n")
 cat("  Word size filter:", WORD_SIZE_FILTER, "bp\n")
 cat("  Excluded chromosomes:", paste(EXCLUDED_CHROMOSOMES, collapse = ", "), "\n")
 cat("  Date stamp:", DATE_STAMP, "\n\n")
-
-#' Convert motif names to EPM format for matching with seqlet statistics
-#' 
-#' This function standardizes motif names from BLAMM output to match the format
-#' used in the motif range files from mo_range analysis. Critical for linking
-#' motif occurrences with their positional preferences from model training.
-#' 
-#' @param code Character vector of motif names from BLAMM
-#' @return Character vector of standardized EPM names
-convert_epm_vitis <- function(code) {
-  # Convert BLAMM format to seqlet statistics format
-  # BLAMM: "epm_vitis_ssr_5_0_R_534" (pattern_metacluster_strand_count)
-  # Target: "epm_vitis_ssr_p0m05" (p{metacluster}m{pattern_padded})
-  
-  # Split by underscore to get components
-  parts <- strsplit(code, "_")
-  
-  converted <- sapply(parts, function(p) {
-    if (length(p) >= 6) {
-      # Extract pattern number (4th element) and metacluster (5th element)
-      pattern_num <- as.numeric(p[4])
-      metacluster <- as.numeric(p[5])
-      
-      # Format as p{metacluster}m{pattern_padded} to match seqlet statistics
-      formatted_pattern <- sprintf("p%dm%02d", metacluster, pattern_num)
-      
-      # Reconstruct: epm_vitis_ssr_p{metacluster}m{pattern}
-      paste("epm_vitis_ssr", formatted_pattern, sep = "_")
-    } else {
-      # Fallback for unexpected formats
-      code
-    }
-  })
-  
-  return(converted)
-}
 
 #' Load and validate seqlet motif range data
 #' 
@@ -244,12 +208,12 @@ apply_feature_filtering <- function(input_file, motif_ranges, weight_filter, wor
   
   # STEP 4: Apply weight region filtering (20% representation threshold)
   weight_filtered <- quartile_filtered
-  
-  if (weight_filter) {
-    cat("\nStep 4: Applying weight region filtering (20% threshold - AND logic)...\n")
 
-    # Calculate weight regions to exclude using AND logic
-    # Only exclude motifs that have <20% representation in BOTH regions
+  if (weight_filter) {
+    cat("\nStep 4: Applying weight region filtering (20% threshold - OR logic)...\n")
+
+    # Calculate weight regions to exclude using OR logic (original implementation)
+    # Exclude each region independently if it has <20% representation
     weight_exclusions <- data.frame()
 
     # Check each motif's regional representation
@@ -262,25 +226,31 @@ apply_feature_filtering <- function(input_file, motif_ranges, weight_filter, wor
         total_count <- tss_count + tts_count
         tss_percent <- tss_count / total_count
         tts_percent <- tts_count / total_count
+        threshold <- 0.20 * total_count
 
-        # AND logic: Only exclude if BOTH regions have <20% representation
-        # This preserves specialized motifs that are >20% in at least one region
-        if (tss_percent < 0.20 && tts_percent < 0.20) {
-          # Exclude this motif from BOTH regions since it's under-represented everywhere
+        # OR logic: Exclude each region independently if <20% (original implementation)
+        # This removes spurious occurrences in under-represented regions
+        if (tss_count < threshold) {
+          # Exclude TSS/upstream region for this motif
           weight_exclusions <- rbind(weight_exclusions,
-                                   data.frame(epm = epm, region = "upstream"),
+                                   data.frame(epm = epm, region = "upstream"))
+        }
+
+        if (tts_count < threshold) {
+          # Exclude TTS/downstream region for this motif
+          weight_exclusions <- rbind(weight_exclusions,
                                    data.frame(epm = epm, region = "downstream"))
         }
       }
     }
-    
+
     # Apply weight filter exclusions
     if (nrow(weight_exclusions) > 0) {
       weight_filtered <- quartile_filtered %>%
         anti_join(weight_exclusions, by = c("epm", "classic_region_corrected" = "region"))
-      
+
       cat("    Excluded", nrow(weight_exclusions), "epm-region combinations\n")
-      cat("    After weight filter:", nrow(weight_filtered), 
+      cat("    After weight filter:", nrow(weight_filtered),
           "(", round(100 * nrow(weight_filtered) / nrow(quartile_filtered), 1), "%)\n")
     } else {
       cat("    No motifs excluded by weight filter\n")

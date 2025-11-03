@@ -12,86 +12,58 @@ library(magrittr)
 # Source utility functions
 source("../utils.R")
 
-#' Load motif clustering data for dual naming system
+#' Load motif name mapping from clustering summary file
 #'
-#' Uses existing clustering output instead of FASTA extraction
-#' @param clustering_file Path to clustering motif summary CSV
+#' Loads clustering (mo_clu) summary which already contains dual naming system:
+#' - basic_name: BLAMM format (epm_vitis_ssr_0_0_F_3417)
+#' - long_name: Full format with consensus (epm_vitis_ssr_0_0_F_3417_13.22_SSCRGCGSCSSCSS)
+#' - short_name: Abbreviated format (epm_vitis_ssr_p0m00F)
+#'
+#' @param clustering_file Path to clustering motif summary CSV from mo_clu
 #' @return Data frame with motif naming mappings
-load_motif_clustering_data <- function(clustering_file) {
-  cat("Loading motif clustering data from:", clustering_file, "\n")
+load_motif_name_mapping <- function(clustering_file) {
+  cat("Loading motif name mappings from:", basename(clustering_file), "\n")
 
   if (!file.exists(clustering_file)) {
     stop("Clustering file not found: ", clustering_file)
   }
 
-  clustering_data <- read.csv(clustering_file, stringsAsFactors = FALSE)
-  cat("  Loaded", nrow(clustering_data), "motif clusters\n")
+  # Load clustering summary
+  name_mapping <- read.csv(clustering_file, stringsAsFactors = FALSE)
 
-  return(clustering_data)
-}
+  # Validate required columns exist
+  required_cols <- c("basic_name", "long_name", "short_name", "consensus")
+  missing_cols <- setdiff(required_cols, names(name_mapping))
 
-#' Create motif name mapping from clustering data
-#'
-#' Converts between BLAMM format, long format (with sequences), and short format (for stats)
-#' @param clustering_data Clustering data from mo_clu output
-#' @return Data frame with name mappings
-create_motif_name_mapping_from_clustering <- function(clustering_data) {
-  cat("Creating motif name mappings from clustering data...\n")
+  if (length(missing_cols) > 0) {
+    stop("Missing required columns in clustering data: ", paste(missing_cols, collapse = ", "))
+  }
 
-  mapping_data <- clustering_data %>%
-    mutate(
-      # Extract existing long format name with sequence
-      long_name = name,  # e.g., "epm_vitis_ssr_0_0_F_4163_13.9_SGCCGCAGCGSCSS"
+  # Ensure motif_sequence column exists (use consensus as fallback)
+  if (!"motif_sequence" %in% names(name_mapping)) {
+    name_mapping$motif_sequence <- name_mapping$consensus
+  }
 
-      # Extract the consensus sequence
-      motif_sequence = consensus,
-
-      # Create basic name (remove score and sequence suffix)
-      # Use full IUPAC DNA alphabet: ATGCNKRYWSMDHBV
-      basic_name = gsub("_[0-9.]+_[ATGCNKRYWSMDHBV]+$", "", name),
-
-      # Create short format name for statistical analysis (memory-efficient)
-      short_name = {
-        # Use vectorized string operations instead of sapply for better memory efficiency
-        # Extract pattern number (4th element after splitting by _)
-        pattern_nums <- as.numeric(sub("^epm_vitis_ssr_([0-9]+)_.*", "\\1", basic_name))
-        # Extract metacluster (5th element)
-        metaclusters <- as.numeric(sub("^epm_vitis_ssr_[0-9]+_([0-9]+)_.*", "\\1", basic_name))
-        # Extract strand (6th element)
-        strands <- sub("^epm_vitis_ssr_[0-9]+_[0-9]+_([FR])_.*", "\\1", basic_name)
-
-        # Create p0m/p1m format vectorized
-        sprintf("epm_vitis_ssr_p%dm%02d%s", metaclusters, pattern_nums, strands)
-      },
-
-      # Extract components from the name for reference (vectorized)
-      pattern_num = as.numeric(sub("^epm_vitis_ssr_([0-9]+)_.*", "\\1", basic_name)),
-      metacluster = as.numeric(sub("^epm_vitis_ssr_[0-9]+_([0-9]+)_.*", "\\1", basic_name)),
-      strand_char = sub("^epm_vitis_ssr_[0-9]+_[0-9]+_([FR])_.*", "\\1", basic_name),
-      count = as.numeric(sub("^epm_vitis_ssr_[0-9]+_[0-9]+_[FR]_([0-9]+)$", "\\1", basic_name))
-    ) %>%
-    select(long_name, short_name, basic_name, motif_sequence, pattern_num, metacluster,
-           strand_char, count, consensus, strand, icscore, nsites, everything())
-
-  cat("  Created", nrow(mapping_data), "name mappings\n")
+  cat("  Loaded", nrow(name_mapping), "motif name mappings\n")
   cat("  Example mapping:\n")
-  cat("    Long:", mapping_data$long_name[1], "\n")
-  cat("    Short:", mapping_data$short_name[1], "\n")
+  cat("    Basic:", name_mapping$basic_name[1], "\n")
+  cat("    Short:", name_mapping$short_name[1], "\n")
+  cat("    Long: ", name_mapping$long_name[1], "\n")
 
-  return(mapping_data)
+  return(name_mapping)
 }
 
 #' Convert BLAMM format motif names to long/short format using clustering data
 #'
 #' @param blamm_motif_names Vector of BLAMM format motif names
-#' @param name_mapping Data frame from create_motif_name_mapping_from_clustering
+#' @param name_mapping Data frame from load_motif_name_mapping()
 #' @return Data frame with converted names
 convert_blamm_to_dual_format <- function(blamm_motif_names, name_mapping) {
   cat("Converting", length(blamm_motif_names), "BLAMM motif names to dual format...\n")
 
   # BLAMM format: epm_vitis_ssr_pattern_metacluster_strand_count
   # Clustering basic_name: epm_vitis_ssr_pattern_metacluster_strand_count (same format!)
-  # Need to match BLAMM names directly against basic_name in clustering data
+  # Now comprehensive clustering file includes BOTH F and R strands, so exact match works
 
   conversion_results <- data.frame(
     blamm_name = blamm_motif_names,
@@ -99,10 +71,9 @@ convert_blamm_to_dual_format <- function(blamm_motif_names, name_mapping) {
   )
 
   # BLAMM names should match basic_name directly (both are same format)
-  # But let's also try removing trailing numbers in case BLAMM has extra suffixes
   conversion_results$clean_blamm_name <- blamm_motif_names
 
-  # Match with clustering data using exact match first
+  # Match with clustering data using exact match
   conversion_results <- conversion_results %>%
     left_join(name_mapping %>% select(basic_name, long_name, short_name, motif_sequence),
               by = c("clean_blamm_name" = "basic_name")) %>%
@@ -119,10 +90,12 @@ convert_blamm_to_dual_format <- function(blamm_motif_names, name_mapping) {
 
   if (successful_conversions < nrow(conversion_results)) {
     failed_names <- conversion_results$blamm_name[is.na(conversion_results$short_name)]
-    cat("  Failed to convert:", length(failed_names), "names\\n")
-    cat("  Example failed BLAMM name:", failed_names[1], "\\n")
-    cat("  Example clustering basic_name:", name_mapping$basic_name[1], "\\n")
-    cat("  Using original names as fallback\\n")
+    cat("  Failed to convert:", length(failed_names), "names\n")
+    cat("  Example failed BLAMM name:", failed_names[1], "\n")
+    cat("  Example clustering basic_name:", name_mapping$basic_name[1], "\n")
+    cat("  Using original names as fallback\n")
+  } else {
+    cat("  All BLAMM names successfully converted to dual format!\n")
   }
 
   return(conversion_results)
@@ -135,7 +108,32 @@ args <- commandArgs(trailingOnly = TRUE)
 default_blamm_dir <- "../../../out/moca_results/mo_proj/genomic_vitis_vinifera_PN40024_1000bp_pt0.0001"
 default_output_dir <- "../../../out/moca_results/mo_proj/filtering/"
 default_output_file <- "filtered_genomic_occurrences.txt"
-default_clustering_file <- "../../../out/moca_results/mo_clu/20250918_vitis_ssr_cwm_clustering_motif_summary.csv"
+
+# Dynamically find the most recent clustering file
+clustering_dir <- "../../../out/moca_results/mo_clu"
+
+# Try comprehensive summary file first (includes both F and R strands)
+clustering_pattern <- "*_cwm_clustering_motif_summary.csv"
+clustering_files <- list.files(clustering_dir, pattern = glob2rx(clustering_pattern), full.names = TRUE)
+
+# Exclude forward_only files (those are clustering-specific outputs)
+clustering_files <- clustering_files[!grepl("forward_only", clustering_files)]
+
+if (length(clustering_files) == 0) {
+  # Fallback to forward_only file (older workflow)
+  cat("Warning: Comprehensive summary not found, falling back to forward_only file\n")
+  clustering_pattern_fallback <- "*_cwm_clustering_forward_only_motif_summary.csv"
+  clustering_files <- list.files(clustering_dir, pattern = glob2rx(clustering_pattern_fallback), full.names = TRUE)
+}
+
+if (length(clustering_files) > 0) {
+  # Use the most recent file (sorted by name, which includes date)
+  default_clustering_file <- sort(clustering_files, decreasing = TRUE)[1]
+  cat("Auto-detected clustering file:", basename(default_clustering_file), "\n")
+} else {
+  stop("No clustering motif summary files found in ", clustering_dir,
+       "\nPlease run cluster_motifs.R first or specify clustering file path manually.")
+}
 
 # Parse arguments
 INPUT_TYPE <- if (length(args) >= 1 && nzchar(args[1])) args[1] else "single"  # "chunks" or "single"
@@ -401,9 +399,8 @@ cat("Starting BLAMM genomic occurrence filtering with dual naming system...\n")
 # Load gene annotations
 gene_annotations <- load_gene_annotations(ANNOTATION_FILE)
 
-# Load motif clustering data for dual naming system
-clustering_data <- load_motif_clustering_data(CLUSTERING_FILE)
-motif_name_mapping <- create_motif_name_mapping_from_clustering(clustering_data)
+# Load motif name mappings from clustering summary (already contains dual naming system)
+motif_name_mapping <- load_motif_name_mapping(CLUSTERING_FILE)
 
 if (INPUT_TYPE == "chunks") {
   # Process chunked files from directory

@@ -37,43 +37,18 @@ if (nchar(script_dir) > 0) {
 # Source utility functions
 source("../utils.R")
 
-# Convert BLAMM format motif names to expected p0m/p1m format
-convert_epm_vitis <- function(code) {
-  # Convert BLAMM format to seqlet statistics format
-  # BLAMM: "epm_vitis_ssr_5_0_R_534" (pattern_metacluster_strand_count)
-  # Target: "epm_vitis_ssr_p0m05" (p{metacluster}m{pattern_padded})
+#' Load motif name mappings from clustering summary file
+#'
+#' Loads comprehensive clustering summary which already contains dual naming system:
+#' - basic_name: BLAMM format (epm_vitis_ssr_0_0_F_3417)
+#' - long_name: Full format with consensus (epm_vitis_ssr_0_0_F_3417_13.22_SSCRGCGSCSSCSS)
+#' - short_name: Abbreviated format (epm_vitis_ssr_p0m00F)
+#'
+#' @param clustering_file Path to clustering motif summary CSV from mo_clu
+#' @return Data frame with motif naming mappings, or NULL if file not found
+load_motif_name_mapping <- function(clustering_file) {
 
-  # Split by underscore to get components
-  parts <- strsplit(code, "_")
-
-  converted <- sapply(parts, function(p) {
-    if (length(p) >= 6) {
-      # Extract pattern number (4th element) and metacluster (5th element)
-      pattern_num <- as.numeric(p[4])
-      metacluster <- as.numeric(p[5])
-
-      # Format as p{metacluster}m{pattern_padded} to match seqlet statistics
-      formatted_pattern <- sprintf("p%dm%02d", metacluster, pattern_num)
-
-      # Reconstruct: epm_vitis_ssr_p{metacluster}m{pattern}
-      paste("epm_vitis_ssr", formatted_pattern, sep = "_")
-    } else {
-      # Fallback for unexpected formats
-      code
-    }
-  })
-
-  return(converted)
-}
-
-# Enhanced dual naming system using existing clustering data
-
-#' Load motif clustering data to get long format names with sequences
-#' @param clustering_file Path to clustering motif summary CSV file
-#' @return Data frame with motif name mappings
-load_motif_clustering_data <- function(clustering_file) {
-
-  cat("Loading motif clustering data for dual naming system...\n")
+  cat("Loading motif name mappings for dual naming system...\n")
 
   if (!file.exists(clustering_file)) {
     # Try to find the most recent clustering file
@@ -82,73 +57,39 @@ load_motif_clustering_data <- function(clustering_file) {
 
     if (length(clustering_files) > 0) {
       clustering_file <- sort(clustering_files, decreasing = TRUE)[1]
-      cat("  Using found clustering file:", clustering_file, "\n")
+      cat("  Using found clustering file:", basename(clustering_file), "\n")
     } else {
       cat("  Warning: No clustering file found - using basic naming only\n")
       return(NULL)
     }
   }
 
-  # Load clustering data
-  clustering_data <- read.csv(clustering_file, stringsAsFactors = FALSE)
-  cat("  Loaded", nrow(clustering_data), "clustered motifs with sequences\n")
+  # Load clustering summary (already has dual naming columns)
+  name_mapping <- read.csv(clustering_file, stringsAsFactors = FALSE)
 
-  # The clustering file has:
-  # name: "epm_vitis_ssr_0_0_F_4163_13.9_SGCCGCAGCGSCSS" (long format)
-  # consensus: "SGCCGCAGCGSCSS" (sequence)
+  # Validate required columns exist
+  required_cols <- c("basic_name", "long_name", "short_name", "consensus")
+  missing_cols <- setdiff(required_cols, names(name_mapping))
 
-  return(clustering_data)
-}
-
-#' Create motif name mapping table from clustering data
-#' @param clustering_data Clustering data from load_motif_clustering_data
-#' @return Data frame with basic_name, long_name, short_name, sequence mappings
-create_motif_name_mapping_from_clustering <- function(clustering_data) {
-
-  if (is.null(clustering_data)) {
+  if (length(missing_cols) > 0) {
+    warning("Missing columns in clustering data: ", paste(missing_cols, collapse = ", "),
+           "\nUsing basic naming only")
     return(NULL)
   }
 
-  # Extract components from long format names
-  mapping_data <- clustering_data %>%
-    mutate(
-      long_name = name,
-      sequence = consensus,
+  # Ensure sequence column exists (use consensus as alias)
+  if (!"sequence" %in% names(name_mapping)) {
+    name_mapping$sequence <- name_mapping$consensus
+  }
 
-      # Extract basic BLAMM name components (remove sequence and score from long name)
-      # epm_vitis_ssr_0_0_F_4163_13.9_SGCCGCAGCGSCSS -> epm_vitis_ssr_0_0_F_4163
-      basic_name = gsub("_[0-9.]+_[ATGCNKRYWSM]+$", "", name),
+  cat("  Loaded mappings for", nrow(name_mapping), "motifs\n")
+  cat("  Sample mapping:\n")
+  cat("    Basic:", name_mapping$basic_name[1], "\n")
+  cat("    Short:", name_mapping$short_name[1], "\n")
+  cat("    Long: ", name_mapping$long_name[1], "\n")
 
-      # Create short format for statistical analysis (p0m/p1m format with strand)
-      short_name = {
-        # Parse pattern_metacluster_strand from basic name
-        parts_list <- strsplit(basic_name, "_")
-
-        sapply(parts_list, function(parts) {
-          if (length(parts) >= 6) {
-            pattern_num <- as.numeric(parts[4])
-            metacluster <- as.numeric(parts[5])
-            strand <- parts[6]
-
-            # Create p0m/p1m format with strand preserved
-            formatted_pattern <- sprintf("p%dm%02d%s", metacluster, pattern_num, strand)
-            paste("epm_vitis_ssr", formatted_pattern, sep = "_")
-          } else {
-            # Fallback to basic name
-            basic_name[1]  # Use the first element as fallback
-          }
-        })
-      }
-    ) %>%
-    select(basic_name, long_name, short_name, sequence, icscore, nsites)
-
-  cat("  Created mapping for", nrow(mapping_data), "motifs\n")
-  cat("  Sample mappings:\n")
-  cat("    Basic: ", mapping_data$basic_name[1], "\n")
-  cat("    Long:  ", mapping_data$long_name[1], "\n")
-  cat("    Short: ", mapping_data$short_name[1], "\n")
-
-  return(mapping_data)
+  # Return only needed columns for efficiency
+  return(name_mapping %>% select(basic_name, long_name, short_name, sequence, icscore, nsites))
 }
 
 # Command line arguments with defaults
@@ -164,7 +105,7 @@ default_motif_file <- if (length(motif_files) > 0) sort(motif_files, decreasing 
 pred_pattern <- "../../../out/predictions/vitis_*_SSR_deepcre_predict_*.csv"
 pred_files <- Sys.glob(pred_pattern)
 default_prediction_file <- if (length(pred_files) > 0) sort(pred_files, decreasing = TRUE)[1] else pred_pattern
-default_expression_file <- "../../../vitis_data/tpm_counts/vitis_drought_leaf_targets.csv"
+default_expression_file <- "../../../vitis_data/tpm_counts/vitis_control_leaf_targets.csv"
 default_output_dir <- "../../../out/moca_results/mo_proj/enrichment"
 
 # Clustering file for dual naming system (contains sequences already)
@@ -226,11 +167,10 @@ load_enrichment_data <- function(motif_file, prediction_file, expression_file, c
 
   # DUAL NAMING SYSTEM: Use existing clustering data with sequences
   if (!is.null(clustering_file)) {
-    cat("  Creating dual naming system from clustering data...\n")
+    cat("  Applying dual naming system from clustering data...\n")
 
-    # Load clustering data and create mapping
-    clustering_data <- load_motif_clustering_data(clustering_file)
-    motif_mapping <- create_motif_name_mapping_from_clustering(clustering_data)
+    # Load motif name mapping (comprehensive clustering summary already has dual naming)
+    motif_mapping <- load_motif_name_mapping(clustering_file)
 
     if (!is.null(motif_mapping)) {
       # Join motif data with clustering mapping
