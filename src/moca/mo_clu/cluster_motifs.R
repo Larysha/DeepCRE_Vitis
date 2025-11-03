@@ -14,24 +14,23 @@ library(universalmotif)
 library(ape)
 library(ggtree)
 
-# setwd("/home/rish/phd_2025/deepcre_vitis/vitis_cre/src")
+# Set working directory to script location
+script_dir <- dirname(normalizePath(sys.frame(1)$ofile, mustWork = FALSE))
+if (nchar(script_dir) > 0) {
+  setwd(script_dir)
+  cat("Working directory set to:", getwd(), "\n")
+}
 
 # Source utility functions
-if (file.exists("../utils.R")) {
-  source("../utils.R")
-} else if (file.exists("../../moca/utils.R")) {
-  source("../../moca/utils.R")
-} else {
-  source("/home/rish/phd_2025/deepcre_vitis/vitis_cre/src/moca/utils.R")
-}
+source("../utils.R")
 
 args <- commandArgs(trailingOnly = TRUE)
 
 # Defaults - these should match the output from moca/mo_nom/get_matrices.R 
 default_spec <- "vitis"
 default_model <- "ssr"
-default_input_dir <- "../../out/moca_results/mo_nom"
-default_output_dir <- "../../out/moca_results/mo_clu"
+default_input_dir <- "../../../out/moca_results/mo_nom"
+default_output_dir <- "../../../out/moca_results/mo_clu"
 
 SPEC <- if (length(args) >= 1 && nzchar(args[1])) args[1] else default_spec
 MODEL <- if (length(args) >= 2 && nzchar(args[2])) args[2] else default_model

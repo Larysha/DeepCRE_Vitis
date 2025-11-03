@@ -14,6 +14,13 @@ library(universalmotif)
 library(ape)
 library(ggtree)
 
+# Set working directory to script location
+script_dir <- dirname(normalizePath(sys.frame(1)$ofile, mustWork = FALSE))
+if (nchar(script_dir) > 0) {
+  setwd(script_dir)
+  cat("Working directory set to:", getwd(), "\n")
+}
+
 # Source utility functions
 source("../utils.R")
 

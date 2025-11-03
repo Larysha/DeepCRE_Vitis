@@ -5,6 +5,13 @@
 # 0. Load Project Utilities
 ###########################
 
+# Set working directory to script location
+script_dir <- dirname(normalizePath(sys.frame(1)$ofile, mustWork = FALSE))
+if (nchar(script_dir) > 0) {
+  setwd(script_dir)
+  cat("Working directory set to:", getwd(), "\n")
+}
+
 source("../utils.R")
 
 setup_project_environment(verbose = TRUE)

@@ -6,22 +6,15 @@
 
 library(dplyr)
 
-# Source utility functions
-# Get the directory of this script for proper path resolution
-script_dir <- dirname(normalizePath(commandArgs(trailingOnly = FALSE)[4]))
-if (is.na(script_dir) || script_dir == ".") {
-  # If sourced interactively, try to find the script location
-  script_dir <- "/home/rish/phd_2025/deepcre_vitis/vitis_cre/src/moca/mo_range"
+# Set working directory to script location
+script_dir <- dirname(normalizePath(sys.frame(1)$ofile, mustWork = FALSE))
+if (nchar(script_dir) > 0) {
+  setwd(script_dir)
+  cat("Working directory set to:", getwd(), "\n")
 }
 
-# Source utils.R from the parent moca directory
-utils_path <- file.path(dirname(script_dir), "utils.R")
-if (file.exists(utils_path)) {
-  source(utils_path)
-} else {
-  # Fallback: try relative path
-  source("../utils.R")
-}
+# Source utility functions
+source("../utils.R")
 
 args <- commandArgs(trailingOnly = TRUE)
 
