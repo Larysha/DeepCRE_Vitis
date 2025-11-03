@@ -1,7 +1,6 @@
 # motif_ranges_meta_fixed.R
 # Calculate motif positional characteristics for TSS and TTS regions
 # Analyses seqlet position data to generate summary statistics for motifs
-# DeepCRE/moca/mo_range
 ######################
 
 library(dplyr)
@@ -21,8 +20,9 @@ args <- commandArgs(trailingOnly = TRUE)
 default_spec <- "vitis"
 default_model <- "ssr"
 default_date <- format(Sys.Date(), "%Y%m%d")
-default_input_dir <- "../out/moca_results/mo_range"
-default_output_dir <- "../out/moca_results/mo_range"
+default_input_dir <- "../../../out/moca_results/mo_range"
+default_output_dir <- "../../../out/moca_results/mo_range"
+
 # Assign arguments or defaults
 SPEC <- if (length(args) >= 1 && nzchar(args[1])) args[1] else default_spec
 MODEL <- if (length(args) >= 2 && nzchar(args[2])) args[2] else default_model
@@ -32,9 +32,9 @@ DATE <- if (length(args) >= 3 && nzchar(args[3])) args[3] else default_date
 if (length(args) >= 4 && nzchar(args[4])) {
   SOURCE_FILE <- args[4]
 } else {
-  cat("Searching for HDF5 source file in ../out/modisco/...\n")
+  cat("Searching for HDF5 source file in ../../../out/modisco/...\n")
   source_file_path <- find_project_files(
-    directory = "../out/modisco",
+    directory = "../../../out/modisco",
     pattern = ".*motifs.*\\.hdf5$",
     description = "MoDISco HDF5 source file",
     select_multiple = FALSE

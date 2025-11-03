@@ -88,7 +88,10 @@ if (length(tts_range_files) > 0) {
 cat("\nAnalyzing positional distributions...\n")
 
 # Define regions based on coordinate system
-# Assuming 0-1500 is TSS-proximal, 1520+ is TTS-proximal
+# Coordinate system: 1000bp upstream + gene body (~1520bp) + 500bp downstream = 3020bp total
+# TSS is at position 1000 (after 1000bp upstream extragenic region)
+# TTS is at position 2520 (1000 + 1520 gene body)
+# For analysis: 0-1500 is TSS-proximal, 1520+ is TTS-proximal
 tss_threshold <- 1500
 tts_start <- 1520
 total_length <- 3020  # Total sequence length
@@ -125,8 +128,10 @@ create_tss_plot <- function(data) {
   p <- ggplot(hist_data, aes(x = bin_center, y = count)) +
     geom_bar(stat = "identity", width = bin_width * 0.8,
              fill = custom_colors[1], alpha = 0.7, color = "black", size = 0.3) +
-    geom_vline(xintercept = 750, color = custom_colors[3], linestyle = "dashed",
-               size = 1, alpha = 0.8) +
+    geom_vline(xintercept = 1000, color = custom_colors[3], linetype = "dashed",
+               size = 1.2, alpha = 0.8) +
+    annotate("text", x = 1000, y = 1600, label = "TSS",
+             color = custom_colors[3], fontface = "bold", size = 4, hjust = -0.1) +
     labs(
       title = "Motif Distribution: TSS-Proximal Region",
       x = "Position (bp)",
@@ -205,8 +210,10 @@ create_tts_plot <- function(data) {
   p <- ggplot(hist_data, aes(x = bin_center, y = count)) +
     geom_bar(stat = "identity", width = bin_width * 0.8,
              fill = custom_colors[2], alpha = 0.7, color = "black", size = 0.3) +
-    geom_vline(xintercept = 750, color = custom_colors[4], linestyle = "dashed",
-               size = 1, alpha = 0.8) +
+    geom_vline(xintercept = 500, color = custom_colors[4], linetype = "dashed",
+               size = 1.2, alpha = 0.8) +
+    annotate("text", x = 500, y = 1600, label = "TTS",
+             color = custom_colors[4], fontface = "bold", size = 4, hjust = -0.1) +
     labs(
       title = "Motif Distribution: TTS-Proximal Region",
       x = "Position (bp)",
@@ -325,8 +332,11 @@ cat("\nSummary table saved to:", summary_file, "\n")
 
 cat("\n=== Interpretation Notes ===\n")
 cat("TSS-proximal (left panel): Shows motif distribution around transcription start sites\n")
+cat("  - TSS position: 1000bp (vertical dashed line)\n")
+cat("  - Region spans: 1000bp upstream + 500bp into gene body\n")
 cat("TTS-proximal (right panel): Shows motif distribution around transcription termination sites\n")
-cat("Vertical dashed lines: Approximate TSS/TTS positions\n")
+cat("  - TTS position: 500bp (vertical dashed line, transformed coordinates)\n")
+cat("  - Region spans: 500bp upstream of TTS + 500bp downstream (3' UTR)\n")
 cat("Clustering patterns: Indicate preferred regulatory regions\n\n")
 
 cat("Biological Significance:\n")

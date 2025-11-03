@@ -1,18 +1,21 @@
 # Cluster motifs based on Sandelin-Wassermann 2004 similarity metrics
-# This script clusters motifs from JASPAR format files using multiple similarity metrics
+# This script clusters motifs from JASPAR format files using Sandelin-Wassermann similarity
 # and identifies groups of highly similar motifs for downstream analysis.
 # Extended from original mo_cluster_v2.3.R
+#
+# IMPORTANT: This script filters to FORWARD STRAND MOTIFS ONLY to eliminate F/R redundancy.
+# The Sandelin-Wassermann algorithm considers reverse complements during comparison,
+# so this filtering does not lose biological information.
+#
+# Method: Sandelin-Wassermann (2004) similarity with hierarchical clustering
+#
 # setwd("/home/rish/phd_2025/deepcre_vitis/vitis_cre/src/moca")
 ######################
 
 library(dplyr)
 library(purrr)
-library(grid)
-library(TFBSTools)
-library(motifStack)
 library(universalmotif)
 library(ape)
-library(ggtree)
 
 # Set working directory to script location
 script_dir <- dirname(normalizePath(sys.frame(1)$ofile, mustWork = FALSE))
@@ -135,23 +138,31 @@ extract_motif_metadata <- function(motifs) {
     # Parse the systematic naming convention
     name_parts <- strsplit(motif_name, "_")[[1]]
     
-    if (length(name_parts) >= 6) {
-      # Extract seqlet count from the name (last part)
+    if (length(name_parts) >= 7) {
+      # Standard format: epm_species_model_pattern_metacluster_strand_seqletcount
+      # Extract from the end backwards
       seqlet_count <- as.numeric(name_parts[length(name_parts)])
-      
+      strand <- name_parts[length(name_parts) - 1]
+      metacluster <- name_parts[length(name_parts) - 2]
+
+      species <- name_parts[2]
+      model <- name_parts[3]
+
+      # Pattern ID is everything between model and metacluster
+      # This handles cases where pattern_id might contain underscores
+      if (length(name_parts) > 7) {
+        pattern_id <- paste(name_parts[4:(length(name_parts) - 3)], collapse = "_")
+      } else {
+        pattern_id <- name_parts[4]
+      }
+    } else if (length(name_parts) == 6) {
+      # Older format without seqlet count: epm_species_model_pattern_metacluster_strand
+      seqlet_count <- NA
       species <- name_parts[2]
       model <- name_parts[3]
       pattern_id <- name_parts[4]
       metacluster <- name_parts[5]
       strand <- name_parts[6]
-      
-      # Handle cases where there might be additional parts in the name
-      if (length(name_parts) > 6) {
-        # Reconstruct pattern_id if it contains underscores
-        pattern_id <- paste(name_parts[4:(length(name_parts)-2)], collapse = "_")
-        metacluster <- name_parts[length(name_parts)-1]
-        strand <- name_parts[length(name_parts)]
-      }
     } else {
       # Fallback for non-standard naming
       warning("Motif name does not follow expected convention: ", motif_name)
@@ -313,88 +324,68 @@ build_phylogenetic_tree <- function(distance_matrix, method = "complete") {
   return(phylo_tree)
 }
 
-perform_motifstack_clustering <- function(motifs) {
-  # Perform clustering using motifStack's clusterMotifs function
-  # This provides an alternative clustering approach to compare with
-  
-  cat("Performing motifStack clustering (this may take several minutes)...\n")
-  
-  # Convert to pcm format for motifStack
-  pcm_motifs <- convert_motifs(motifs, class = "motifStack-pcm")
-  
-  tryCatch({
-    clustered_motifs <- clusterMotifs(pcm_motifs, method = "Smith-Waterman")
-    phylo_tree <- as.phylo(clustered_motifs)
-    
-    return(list(
-      clustered = clustered_motifs,
-      tree = phylo_tree,
-      ordered_motifs = pcm_motifs[clustered_motifs$order]
-    ))
-  }, error = function(e) {
-    warning("motifStack clustering failed: ", e$message)
-    return(NULL)
-  })
-}
 
 #######################################################
 # Output generation and file writing
 #######################################################
 
-generate_output_files <- function(motifs, metadata, similarity_results, trees, 
+generate_output_files <- function(motifs, metadata, similarity_results, tree,
                                  output_dir, file_prefix) {
-  # Generate comprehensive output files for the clustering analysis
-  
+  # Generate comprehensive output files for the Sandelin-Wassermann clustering analysis
+
   # Create summary of motif characteristics
   motif_summary <- summarise_motifs(motifs)
   summary_file <- file.path(output_dir, paste0(file_prefix, "_motif_summary.csv"))
   write.csv(motif_summary, file = summary_file, row.names = FALSE)
   cat("Motif summary written to:", basename(summary_file), "\n")
-  
+
   # Write similarity matrix
-  sim_file <- file.path(output_dir, paste0(file_prefix, "_similarity_matrix_SW.csv"))
-  write.table(similarity_results$similarity, file = sim_file, 
+  sim_file <- file.path(output_dir, paste0(file_prefix, "_similarity_matrix.csv"))
+  write.table(similarity_results$similarity, file = sim_file,
               sep = "\t", col.names = NA, quote = FALSE)
   cat("Similarity matrix written to:", basename(sim_file), "\n")
-  
+
   # Write motif groupings
-  unique_file <- file.path(output_dir, paste0(file_prefix, "_unique_motifs_SW.csv"))
-  redundant_file <- file.path(output_dir, paste0(file_prefix, "_redundant_motifs_SW.csv"))
-  
-  write.table(similarity_results$groups$unique_motifs, file = unique_file, 
+  unique_file <- file.path(output_dir, paste0(file_prefix, "_unique_motifs.csv"))
+  redundant_file <- file.path(output_dir, paste0(file_prefix, "_redundant_motifs.csv"))
+
+  write.table(similarity_results$groups$unique_motifs, file = unique_file,
               sep = "\t", col.names = "motif_name", quote = FALSE, row.names = FALSE)
-  write.table(similarity_results$groups$redundant_motifs, file = redundant_file, 
+  write.table(similarity_results$groups$redundant_motifs, file = redundant_file,
               sep = "\t", col.names = "motif_name", quote = FALSE, row.names = FALSE)
-  
+
   cat("Unique motifs list written to:", basename(unique_file), "\n")
   cat("Redundant motifs list written to:", basename(redundant_file), "\n")
-  
-  # Write phylogenetic trees
-  if (!is.null(trees$sandelin_wassermann)) {
-    sw_tree_file <- file.path(output_dir, paste0(file_prefix, "_tree_Sandelin_Wassermann.nwk"))
-    write.tree(trees$sandelin_wassermann, file = sw_tree_file)
-    cat("Sandelin-Wassermann tree written to:", basename(sw_tree_file), "\n")
-  }
-  
-  if (!is.null(trees$motifstack)) {
-    ms_tree_file <- file.path(output_dir, paste0(file_prefix, "_tree_Smith_Waterman.nwk"))
-    write.tree(trees$motifstack, file = ms_tree_file)
-    cat("Smith-Waterman tree written to:", basename(ms_tree_file), "\n")
-  }
+
+  # Write phylogenetic tree
+  tree_file <- file.path(output_dir, paste0(file_prefix, "_tree.nwk"))
+  write.tree(tree, file = tree_file)
+  cat("Phylogenetic tree written to:", basename(tree_file), "\n")
   
   # Create comprehensive analysis report
   report_file <- file.path(output_dir, paste0(file_prefix, "_clustering_report.txt"))
   
   report_content <- c(
     paste("Motif Clustering Analysis Report"),
+    paste("Method: Sandelin-Wassermann (2004)"),
     paste("Generated:", Sys.time()),
     paste("Input file:", basename(input_file)),
     paste("Species:", SPEC, "| Model:", MODEL, "| Matrix type:", toupper(MATRIX_TYPE)),
     "",
-    paste("Total motifs analysed:", length(motifs)),
-    paste("Similarity threshold (95th percentile):", round(similarity_results$groups$threshold, 4)),
-    paste("Unique motifs:", length(similarity_results$groups$unique_motifs)),
-    paste("Redundant motifs:", length(similarity_results$groups$redundant_motifs)),
+    paste("ANALYSIS SCOPE: Forward strand motifs only"),
+    paste("Reverse strand motifs excluded to eliminate F/R pair redundancy"),
+    paste("Sandelin-Wassermann algorithm considers reverse complements during comparison"),
+    "",
+    paste("CLUSTERING PARAMETERS:"),
+    paste("  Method: Sandelin-Wassermann similarity"),
+    paste("  Linkage: Complete linkage hierarchical clustering"),
+    paste("  Similarity threshold: 95th percentile"),
+    "",
+    paste("RESULTS:"),
+    paste("  Total motifs analysed:", length(motifs)),
+    paste("  Similarity threshold (95th percentile):", round(similarity_results$groups$threshold, 4)),
+    paste("  Unique motifs:", length(similarity_results$groups$unique_motifs)),
+    paste("  Redundant motifs:", length(similarity_results$groups$redundant_motifs)),
     "",
     "Motif length distribution:",
     paste(capture.output(summary(metadata$motif_length)), collapse = "\n"),
@@ -420,15 +411,35 @@ generate_output_files <- function(motifs, metadata, similarity_results, trees,
 #######################################################
 
 main <- function() {
- 
+
   start_time <- Sys.time()
-  
+
   tryCatch({
     # Load and validate motifs
     motifs <- load_and_validate_motifs(input_file)
-    
+
     # Extract metadata
     metadata <- extract_motif_metadata(motifs)
+
+    # Filter to forward strand motifs only
+    # This eliminates F/R redundancy since SW algorithm considers reverse complements
+    cat("\n=== Filtering to Forward Strand Motifs ===\n")
+    cat("Total motifs loaded:", length(motifs), "\n")
+
+    forward_indices <- which(metadata$strand == "F")
+    reverse_count <- sum(metadata$strand == "R", na.rm = TRUE)
+
+    if (length(forward_indices) == 0) {
+      stop("No forward strand motifs found. Check motif naming convention.")
+    }
+
+    motifs <- motifs[forward_indices]
+    metadata <- metadata[forward_indices, ]
+
+    cat("Forward strand motifs retained:", length(motifs), "\n")
+    cat("Reverse strand motifs excluded:", reverse_count, "\n")
+    cat("This eliminates F/R pair redundancy from clustering analysis.\n")
+    cat("Note: Sandelin-Wassermann will still consider reverse complements during comparison.\n")
     
     # Enhance motifs with additional metadata
     enhanced_motifs <- enhance_motif_metadata(motifs, metadata)
@@ -439,24 +450,15 @@ main <- function() {
     # Identify similarity groups
     similarity_groups <- identify_similarity_groups(similarity_results$similarity_matrix)
     similarity_results$groups <- similarity_groups
-    
-    # Build phylogenetic trees
-    trees <- list()
-    
-    # Sandelin-Wassermann tree
-    trees$sandelin_wassermann <- build_phylogenetic_tree(similarity_results$distance)
-    
-    # motifStack clustering (optional, can be slow)
-    cat("\nPerforming alternative clustering with motifStack...\n")
-    motifstack_result <- perform_motifstack_clustering(enhanced_motifs)
-    if (!is.null(motifstack_result)) {
-      trees$motifstack <- motifstack_result$tree
-    }
-    
+
+    # Build phylogenetic tree using Sandelin-Wassermann
+    cat("\nBuilding phylogenetic tree...\n")
+    phylo_tree <- build_phylogenetic_tree(similarity_results$distance)
+
     # Generate output files
-    file_prefix <- paste0(DATE, "_", SPEC, "_", MODEL, "_cwm_clustering")
-    output_files <- generate_output_files(enhanced_motifs, metadata, similarity_results, 
-                                         trees, dirpath_out, file_prefix)
+    file_prefix <- paste0(DATE, "_", SPEC, "_", MODEL, "_cwm_clustering_forward_only")
+    output_files <- generate_output_files(enhanced_motifs, metadata, similarity_results,
+                                         phylo_tree, dirpath_out, file_prefix)
     
     # Print summary
     end_time <- Sys.time()
@@ -473,7 +475,7 @@ main <- function() {
       motifs = enhanced_motifs,
       metadata = metadata,
       similarity = similarity_results,
-      trees = trees,
+      tree = phylo_tree,
       output_files = output_files
     )))
     

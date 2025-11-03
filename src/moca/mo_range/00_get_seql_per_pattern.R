@@ -1,7 +1,6 @@
 # get_seqlets_per_pattern_fixed.R
 # Extracts seqlet positional information from TF-MoDISco HDF5 output
 # Fixed version based on working original script structure
-# DeepCRE/moca/mo_range
 ######################
 
 library(dplyr)
@@ -24,8 +23,8 @@ args <- commandArgs(trailingOnly = TRUE)
 
 default_spec <- "vitis"
 default_model <- "ssr"
-default_input_dir <- "../out/modisco"
-default_output_dir <- "../out/moca_results/mo_range"
+default_input_dir <- "../../../out/modisco"
+default_output_dir <- "../../../out/moca_results/mo_range"
 
 # Assign arguments or defaults
 SPEC <- if (length(args) >= 1 && nzchar(args[1])) args[1] else default_spec

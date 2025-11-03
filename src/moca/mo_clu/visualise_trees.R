@@ -1,5 +1,17 @@
 # Visualize motif clustering trees from .nwk files
-# This script creates publication-ready tree visualizations
+# This script creates publication-ready tree visualizations using Sandelin-Wassermann clustering
+#
+# Features:
+# - Automatically finds and visualizes Sandelin-Wassermann phylogenetic trees
+# - Works with forward strand representatives only (matching cluster_motifs.R output)
+# - Generates metacluster-colored rectangular and circular tree layouts
+# - Produces distance heatmaps showing motif similarity relationships
+#
+# Method: Sandelin-Wassermann (2004) similarity with hierarchical clustering
+#
+# Note: Strand-specific plots are NOT generated since all motifs are forward strand only
+#
+# Output files will be saved to: out/moca_results/mo_clu/trees/
 ######################
 
 library(ape)
@@ -88,24 +100,19 @@ visualize_motif_tree <- function(tree_file, output_prefix = "motif_tree") {
   # Parse motif metadata
   metadata <- parse_motif_metadata(tree$tip.label)
 
-  # Create color schemes
+  # Create color scheme for metaclusters
   metacluster_colors <- c("0" = "#804a5f", "1" = "#478fca")  # Dark Purple for MC0, Blue for MC1
-  strand_colors <- c("F" = "#3e2c57", "R" = "#AF91AF")       # Dark Blue for Forward, Light Purple for Reverse
 
-  # Create filtered tree with only forward strand motifs (for metacluster and circular views)
-  # Forward strands serve as representatives since F and R are reverse complements
-  forward_motifs <- metadata$motif_name[metadata$strand == "F"]
-  tree_forward <- keep.tip(tree, forward_motifs)
-  metadata_forward <- metadata[metadata$strand == "F", ]
+  # Note: All motifs are forward strand only (from cluster_motifs.R filtering)
+  # No need to filter further or create strand-specific plots
+  cat("All motifs are forward strand representatives\n")
+  cat("(Clustering script already filtered to forward strands only)\n")
 
-  cat("Using", length(forward_motifs), "forward strand motifs as representatives\n")
-  cat("(Reverse strand motifs excluded from metacluster/circular views as they cluster with their complement / are redundant)\n")
-
-  # Tree colored by metacluster (forward strands only)
-  p1 <- ggtree(tree_forward, layout = "rectangular") +
-    geom_tippoint(aes(color = metadata_forward$metacluster[match(label, metadata_forward$motif_name)]),
+  # Tree colored by metacluster (rectangular layout)
+  p1 <- ggtree(tree, layout = "rectangular") +
+    geom_tippoint(aes(color = metadata$metacluster[match(label, metadata$motif_name)]),
                   size = 4) +
-    geom_tiplab(aes(label = metadata_forward$short_label[match(label, metadata_forward$motif_name)]),
+    geom_tiplab(aes(label = metadata$short_label[match(label, metadata$motif_name)]),
                 size = 4, hjust = -0.1, fontface = "bold") +
     scale_color_manual(values = metacluster_colors, name = "Metacluster",
                        labels = c("0" = "MC0 (High Expression)", "1" = "MC1 (Low Expression)")) +
@@ -115,27 +122,12 @@ visualize_motif_tree <- function(tree_file, output_prefix = "motif_tree") {
           legend.position = "bottom",
           legend.title = element_text(size = 14, face = "bold"),
           legend.text = element_text(size = 12))
-  
-  # Tree colored by strand
-  p2 <- ggtree(tree, layout = "rectangular") +
-    geom_tippoint(aes(color = metadata$strand[match(label, metadata$motif_name)]), 
-                  size = 4) +
-    geom_tiplab(aes(label = metadata$short_label[match(label, metadata$motif_name)]),
-                size = 4, hjust = -0.1, fontface = "bold") +
-    scale_color_manual(values = strand_colors, name = "Strand",
-                       labels = c("F" = "Forward", "R" = "Reverse")) +
-    theme_tree2() +
-    ggtitle("Motif Clustering Tree - Colored by Strand") +
-    theme(plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
-          legend.position = "bottom",
-          legend.title = element_text(size = 14, face = "bold"),
-          legend.text = element_text(size = 12))
-  
-  # Circular tree with annotations (forward strands only)
-  p3 <- ggtree(tree_forward, layout = "circular") +
-    geom_tippoint(aes(color = metadata_forward$metacluster[match(label, metadata_forward$motif_name)]),
+
+  # Circular tree with annotations
+  p2 <- ggtree(tree, layout = "circular") +
+    geom_tippoint(aes(color = metadata$metacluster[match(label, metadata$motif_name)]),
                   size = 3) +
-    geom_tiplab(aes(label = metadata_forward$short_label[match(label, metadata_forward$motif_name)]),
+    geom_tiplab(aes(label = metadata$short_label[match(label, metadata$motif_name)]),
                 size = 3, hjust = -0.1, fontface = "bold") +
     scale_color_manual(values = metacluster_colors, name = "Metacluster",
                        labels = c("0" = "MC0 (High Expression)", "1" = "MC1 (Low Expression)")) +
@@ -144,37 +136,29 @@ visualize_motif_tree <- function(tree_file, output_prefix = "motif_tree") {
           legend.position = "bottom",
           legend.title = element_text(size = 14, face = "bold"),
           legend.text = element_text(size = 12))
-  
+
   # Save plots to output directory
   mc_file <- file.path(output_dir, paste0(output_prefix, "_metacluster.png"))
-  strand_file <- file.path(output_dir, paste0(output_prefix, "_strand.png"))
   circular_file <- file.path(output_dir, paste0(output_prefix, "_circular.png"))
 
   ggsave(mc_file, p1, width = 15, height = 18, dpi = 300)
-  ggsave(strand_file, p2, width = 15, height = 18, dpi = 300)
-  ggsave(circular_file, p3, width = 14, height = 14, dpi = 300)
+  ggsave(circular_file, p2, width = 14, height = 14, dpi = 300)
 
   cat("Saved tree visualizations:\n")
   cat("  ", mc_file, "\n")
-  cat("  ", strand_file, "\n")
   cat("  ", circular_file, "\n")
   
   # Print summary statistics
-  cat("\nTree Summary (Full Tree):\n")
+  cat("\nTree Summary:\n")
   cat("Total motifs:", length(tree$tip.label), "\n")
   cat("Metacluster distribution:\n")
   print(table(metadata$metacluster))
-  cat("Strand distribution:\n")
+  cat("Strand (all should be F):\n")
   print(table(metadata$strand))
   cat("Seqlet count range:", min(metadata$seqlet_count, na.rm = TRUE), "-",
       max(metadata$seqlet_count, na.rm = TRUE), "\n")
 
-  cat("\nForward Strand Representatives:\n")
-  cat("Total forward motifs:", length(forward_motifs), "\n")
-  cat("Metacluster distribution (forward only):\n")
-  print(table(metadata_forward$metacluster))
-  
-  return(list(tree = tree, metadata = metadata, plots = list(p1, p2, p3)))
+  return(list(tree = tree, metadata = metadata, plots = list(p1, p2)))
 }
 
 # Function to create a heatmap of pairwise distances
@@ -225,19 +209,22 @@ if (!interactive()) {
     stop("Usage: Rscript visualize_motif_tree.R <tree_file.nwk> [output_prefix]")
   }
 } else {
-  # Interactive usage - set your file path here
-  # Find the most recent Sandelin-Wassermann tree file
-  tree_pattern <- "*_vitis_ssr_cwm_clustering_tree_Sandelin_Wassermann.nwk"
+  # Interactive usage - automatically find tree file
+  cat("=== Searching for Sandelin-Wassermann tree file ===\n")
+
+  # Pattern to match forward_only tree files
+  tree_pattern <- "*_cwm_clustering_forward_only_tree.nwk"
 
   # Try multiple possible directories
   possible_dirs <- c(
     ".",
-    "../../out/moca_results/mo_clu",
     "../../../out/moca_results/mo_clu",
+    "../../out/moca_results/mo_clu",
     "/home/rish/phd_2025/deepcre_vitis/vitis_cre/out/moca_results/mo_clu"
   )
 
   tree_files <- c()
+
   for (dir in possible_dirs) {
     if (dir.exists(dir)) {
       files <- list.files(dir, pattern = glob2rx(tree_pattern), full.names = TRUE)
@@ -246,14 +233,15 @@ if (!interactive()) {
   }
 
   if (length(tree_files) == 0) {
-    stop("No Sandelin-Wassermann tree files found matching pattern: ", tree_pattern,
+    stop("No tree files found matching pattern: ", tree_pattern,
          "\nSearched in directories: ", paste(possible_dirs, collapse = ", "))
   }
 
   # Use the most recent file (alphabetically last due to date prefix)
   tree_file <- sort(tree_files, decreasing = TRUE)[1]
-  cat("Using tree file:", tree_file, "\n")
-  output_prefix <- "vitis_ssr_motif_tree"
+  cat("Found tree file:", basename(tree_file), "\n")
+
+  output_prefix <- "vitis_ssr_motif_tree_forward_only"
 }
 
 # Check if file exists
@@ -261,12 +249,28 @@ if (!file.exists(tree_file)) {
   stop("Tree file not found: ", tree_file)
 }
 
+###########################
 # Generate visualizations
-cat("Creating motif tree visualizations...\n")
+###########################
+cat("\n=== Creating Motif Tree Visualizations ===\n")
+cat("Method: Sandelin-Wassermann (2004)\n")
+cat("Creating phylogenetic tree plots...\n")
 results <- visualize_motif_tree(tree_file, output_prefix)
 
-# Create distance heatmap
 cat("Creating distance heatmap...\n")
 heatmap_plot <- create_distance_heatmap(tree_file, output_prefix)
 
-cat("Visualization complete!\n")
+cat("\n=== Visualization Complete ===\n")
+cat("All plots saved to:", output_dir, "\n\n")
+
+# Print summary of generated files
+cat("Generated files:\n")
+cat("  - Metacluster tree (rectangular layout)\n")
+cat("  - Circular tree\n")
+cat("  - Distance heatmap\n")
+cat("\nInterpretation tips:\n")
+cat("  - Branch lengths represent motif dissimilarity (longer = more different)\n")
+cat("  - Tight clusters indicate groups of similar motifs (potential TF families)\n")
+cat("  - Metacluster colors show MC0 (high expression) vs MC1 (low expression)\n")
+cat("  - Check consensus sequences for motifs that cluster together\n")
+cat("\nAll visualizations complete!\n")
